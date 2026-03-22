@@ -4,11 +4,13 @@ import { getFirstProjectDestination } from '@/shared/lib/firstProjectDestination
 import { useOrganizationStore } from '@/shared/stores/useOrganizationStore';
 import { useUiPreferencesStore } from '@/shared/stores/useUiPreferencesStore';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
+import { useLocalOrganizationStore } from '@/shared/stores/useLocalOrganizationStore';
 
 export function RootRedirectPage() {
   const { config, loading, loginStatus } = useUserSystem();
   const setSelectedOrgId = useOrganizationStore((s) => s.setSelectedOrgId);
   const appNavigation = useAppNavigation();
+  const isLoggedIn = loginStatus?.status === 'loggedin';
 
   useEffect(() => {
     if (loading || !config) {
@@ -22,21 +24,15 @@ export function RootRedirectPage() {
         return;
       }
 
-      if (loginStatus?.status !== 'loggedin') {
-        appNavigation.goToWorkspacesCreate({ replace: true });
-        return;
-      }
-
-      // Read saved selections imperatively to avoid re-triggering this effect
-      // when the scratch store initializes from the server
       const { selectedOrgId, selectedProjectId } =
         useUiPreferencesStore.getState();
 
-      const destination = await getFirstProjectDestination(
+      let destination = await getFirstProjectDestination(
         setSelectedOrgId,
         selectedOrgId,
         selectedProjectId
       );
+
       if (!isActive) {
         return;
       }
@@ -46,7 +42,35 @@ export function RootRedirectPage() {
         return;
       }
 
-      appNavigation.goToWorkspacesCreate({ replace: true });
+      if (destination?.kind === 'workspaces') {
+        appNavigation.goToWorkspaces({ replace: true });
+        return;
+      }
+
+      if (!destination && !isLoggedIn) {
+        try {
+          const localOrgStore = useLocalOrganizationStore.getState();
+          const existingOrgs = localOrgStore.organizations;
+          
+          if (existingOrgs.length > 0) {
+            localOrgStore.setSelectedOrgId(existingOrgs[0].id);
+          } else {
+            const newOrg = localOrgStore.createOrganization(
+              'My Workspace',
+              `workspace-${Date.now()}`
+            );
+            localOrgStore.setSelectedOrgId(newOrg.id);
+          }
+          
+          if (!isActive) return;
+          appNavigation.goToWorkspaces({ replace: true });
+          return;
+        } catch (error) {
+          console.error('Failed to create default organization:', error);
+        }
+      }
+
+      appNavigation.goToWorkspaces({ replace: true });
     })();
 
     return () => {

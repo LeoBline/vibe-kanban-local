@@ -2,23 +2,22 @@ import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Group, Layout, Panel, Separator } from 'react-resizable-panels';
 import { OrgProvider } from '@/shared/providers/remote/OrgProvider';
+import { LocalOrgProvider } from '@/shared/providers/local/LocalOrgProvider';
 import { useOrgContext } from '@/shared/hooks/useOrgContext';
 import { ProjectProvider } from '@/shared/providers/remote/ProjectProvider';
+import { LocalProjectProvider } from '@/shared/providers/local/LocalProjectProvider';
 import { useProjectContext } from '@/shared/hooks/useProjectContext';
 import { useActions } from '@/shared/hooks/useActions';
 import { usePageTitle } from '@/shared/hooks/usePageTitle';
 import { KanbanContainer } from '@/features/kanban/ui/KanbanContainer';
 import { useIsMobile } from '@/shared/hooks/useIsMobile';
 import { ProjectRightSidebarContainer } from './ProjectRightSidebarContainer';
-import { LoginRequiredPrompt } from '@/shared/dialogs/shared/LoginRequiredPrompt';
 import {
   PERSIST_KEYS,
   usePaneSize,
 } from '@/shared/stores/useUiPreferencesStore';
-import { useUserOrganizations } from '@/shared/hooks/useUserOrganizations';
 import { useOrganizationProjects } from '@/shared/hooks/useOrganizationProjects';
 import { useOrganizationStore } from '@/shared/stores/useOrganizationStore';
-import { useAuth } from '@/shared/hooks/auth/useAuth';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
 import { useCurrentKanbanRouteState } from '@/shared/hooks/useCurrentKanbanRouteState';
 import {
@@ -192,12 +191,15 @@ function ProjectKanbanInner({ projectId }: { projectId: string }) {
     );
   }
 
+  const isLocalProject = projectId.startsWith('local-');
+  const ProjectProviderComponent = isLocalProject ? LocalProjectProvider : ProjectProvider;
+
   return (
-    <ProjectProvider projectId={projectId}>
+    <ProjectProviderComponent projectId={projectId}>
       <ProjectMutationsRegistration>
         <ProjectKanbanLayout projectName={project.name} />
       </ProjectMutationsRegistration>
-    </ProjectProvider>
+    </ProjectProviderComponent>
   );
 }
 
@@ -205,16 +207,12 @@ function ProjectKanbanInner({ projectId }: { projectId: string }) {
  * Hook to find a project by ID, using orgId from Zustand store
  */
 function useFindProjectById(projectId: string | undefined) {
-  const { isLoaded: authLoaded } = useAuth();
-  const { data: orgsData, isLoading: orgsLoading } = useUserOrganizations();
   const selectedOrgId = useOrganizationStore((s) => s.selectedOrgId);
-  const organizations = orgsData?.organizations ?? [];
-
-  // Use stored org ID, or fall back to first org
-  const orgIdToUse = selectedOrgId ?? organizations[0]?.id ?? null;
 
   const { data: projects = [], isLoading: projectsLoading } =
-    useOrganizationProjects(orgIdToUse);
+    useOrganizationProjects(selectedOrgId);
+
+  console.log('[DEBUG useFindProjectById]', { projectId, selectedOrgId, projectsCount: projects.length, projects });
 
   const project = useMemo(() => {
     if (!projectId) return undefined;
@@ -224,8 +222,7 @@ function useFindProjectById(projectId: string | undefined) {
   return {
     project,
     organizationId: project?.organization_id ?? selectedOrgId,
-    // Include auth loading state - we can't determine project access until auth loads
-    isLoading: !authLoaded || orgsLoading || projectsLoading,
+    isLoading: projectsLoading,
   };
 }
 
@@ -248,7 +245,6 @@ export function ProjectKanban() {
     useCurrentKanbanRouteState();
   const appNavigation = useAppNavigation();
   const { t } = useTranslation('common');
-  const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const issueComposerKey = useMemo(() => {
     if (!projectId) {
       return null;
@@ -282,25 +278,11 @@ export function ProjectKanban() {
     projectId ?? undefined
   );
 
-  // Show loading while auth state is being determined
-  if (!authLoaded || isLoading) {
+  // Show loading while data is being determined
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full w-full">
         <p className="text-low">{t('states.loading')}</p>
-      </div>
-    );
-  }
-
-  // If not signed in, prompt user to log in
-  if (!isSignedIn) {
-    return (
-      <div className="flex items-center justify-center h-full w-full p-base">
-        <LoginRequiredPrompt
-          className="max-w-md"
-          title={t('kanban.loginRequired.title')}
-          description={t('kanban.loginRequired.description')}
-          actionLabel={t('kanban.loginRequired.action')}
-        />
       </div>
     );
   }
@@ -313,9 +295,12 @@ export function ProjectKanban() {
     );
   }
 
+  const isLocalOrg = organizationId.startsWith('local-');
+  const OrgProviderComponent = isLocalOrg ? LocalOrgProvider : OrgProvider;
+
   return (
-    <OrgProvider organizationId={organizationId}>
+    <OrgProviderComponent organizationId={organizationId}>
       <ProjectKanbanInner projectId={projectId} />
-    </OrgProvider>
+    </OrgProviderComponent>
   );
 }

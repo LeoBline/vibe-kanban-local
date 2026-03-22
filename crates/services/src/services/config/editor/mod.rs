@@ -57,6 +57,7 @@ pub enum EditorType {
     Zed,
     Xcode,
     GoogleAntigravity,
+    Trae,
     Custom,
 }
 
@@ -99,7 +100,8 @@ impl EditorConfig {
             EditorType::IntelliJ => "idea",
             EditorType::Zed => "zed",
             EditorType::Xcode => "xed",
-            EditorType::GoogleAntigravity => "antigravity",
+            EditorType::GoogleAntigravity => "google-antigravity",
+            EditorType::Trae => "trae",
             EditorType::Custom => {
                 // Custom editor - use user-provided command or fallback to VSCode
                 self.custom_command.as_deref().unwrap_or("code")

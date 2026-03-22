@@ -18,16 +18,10 @@ pub struct Project {
 
 impl Project {
     pub async fn find_all(pool: &SqlitePool) -> Result<Vec<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            Project,
-            r#"SELECT id as "id!: Uuid",
-                      name,
-                      default_agent_working_dir,
-                      remote_project_id as "remote_project_id: Uuid",
-                      created_at as "created_at!: DateTime<Utc>",
-                      updated_at as "updated_at!: DateTime<Utc>"
+        sqlx::query_as::<_, Project>(
+            r#"SELECT id, name, default_agent_working_dir, remote_project_id, created_at, updated_at
                FROM projects
-               ORDER BY created_at DESC"#
+               ORDER BY created_at DESC"#,
         )
         .fetch_all(pool)
         .await
@@ -38,13 +32,11 @@ impl Project {
         id: Uuid,
         remote_project_id: Option<Uuid>,
     ) -> Result<(), sqlx::Error> {
-        sqlx::query!(
-            r#"UPDATE projects
-               SET remote_project_id = $2
-               WHERE id = $1"#,
-            id,
-            remote_project_id
+        sqlx::query(
+            r#"UPDATE projects SET remote_project_id = $1, updated_at = datetime('now', 'subsec') WHERE id = $2"#,
         )
+        .bind(remote_project_id)
+        .bind(id)
         .execute(pool)
         .await?;
 

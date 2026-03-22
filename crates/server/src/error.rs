@@ -73,6 +73,8 @@ pub enum ApiError {
     BadRequest(String),
     #[error("Conflict: {0}")]
     Conflict(String),
+    #[error("Not found")]
+    NotFound,
     #[error("Forbidden: {0}")]
     Forbidden(String),
     #[error("Too many requests: {0}")]
@@ -438,6 +440,7 @@ impl IntoResponse for ApiError {
                 "TooManyRequests",
                 msg.clone(),
             ),
+            ApiError::NotFound => ErrorInfo::not_found("NotFound", "Resource not found."),
             ApiError::Multipart(_) => ErrorInfo::bad_request(
                 "MultipartError",
                 "Failed to upload file. Please ensure the file is valid and try again.",

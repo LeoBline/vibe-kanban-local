@@ -22,9 +22,11 @@ import {
 } from 'shared/remote-types';
 import { getRandomPresetColor, PRESET_COLORS } from '@/shared/lib/colors';
 import { ColorPicker } from '@/shared/components/ui-new/containers/ColorPickerContainer';
+import { useLocalProjectStore } from '@/shared/stores/useLocalProjectStore';
 
 export type CreateRemoteProjectDialogProps = {
   organizationId: string;
+  isLocalMode?: boolean;
 };
 
 export type CreateRemoteProjectResult = {
@@ -33,13 +35,15 @@ export type CreateRemoteProjectResult = {
 };
 
 const CreateRemoteProjectDialogImpl = create<CreateRemoteProjectDialogProps>(
-  ({ organizationId }) => {
+  ({ organizationId, isLocalMode = false }) => {
     const modal = useModal();
     const { t } = useTranslation('projects');
     const [name, setName] = useState('');
     const [color, setColor] = useState<string>(() => getRandomPresetColor());
     const [error, setError] = useState<string | null>(null);
     const [isCreating, setIsCreating] = useState(false);
+
+    const localProjectStore = useLocalProjectStore();
 
     const params = useMemo(
       () => ({ organization_id: organizationId }),
@@ -48,6 +52,7 @@ const CreateRemoteProjectDialogImpl = create<CreateRemoteProjectDialogProps>(
 
     const { insert, error: syncError } = useShape(PROJECTS_SHAPE, params, {
       mutation: PROJECT_MUTATION,
+      enabled: !isLocalMode,
     });
 
     useEffect(() => {
@@ -88,17 +93,26 @@ const CreateRemoteProjectDialogImpl = create<CreateRemoteProjectDialogProps>(
       setIsCreating(true);
 
       try {
-        const { data: project, persisted } = insert({
-          organization_id: organizationId,
-          name: name.trim(),
-          color: color,
-        });
+        let project: Project;
 
-        const persistedProject = await persisted;
+        if (isLocalMode) {
+          project = localProjectStore.createProject(
+            organizationId,
+            name.trim(),
+            color
+          );
+        } else {
+          const result = insert({
+            organization_id: organizationId,
+            name: name.trim(),
+            color: color,
+          });
+          project = result.data;
+        }
 
         modal.resolve({
           action: 'created',
-          project: persistedProject ?? project,
+          project: project,
         } as CreateRemoteProjectResult);
         modal.hide();
       } catch (err) {

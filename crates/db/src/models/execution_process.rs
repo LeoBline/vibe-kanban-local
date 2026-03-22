@@ -67,9 +67,6 @@ pub struct ExecutionProcess {
     pub executor_action: sqlx::types::Json<ExecutorActionField>,
     pub status: ExecutionProcessStatus,
     pub exit_code: Option<i64>,
-    /// dropped: true if this process is excluded from the current
-    /// history view (due to restore/trimming). Hidden from logs/timeline;
-    /// still listed in the Processes tab.
     pub dropped: bool,
     pub started_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
@@ -100,7 +97,6 @@ pub struct ExecutionContext {
     pub repos: Vec<Repo>,
 }
 
-/// Summary info about the latest execution process for a workspace
 #[derive(Debug, Clone, FromRow)]
 pub struct LatestProcessInfo {
     pub workspace_id: Uuid,
@@ -128,45 +124,38 @@ pub struct MissingBeforeContext {
     pub repo_path: Option<String>,
 }
 
+#[derive(Debug, Clone, FromRow)]
+struct MissingBeforeContextRow {
+    pub id: Uuid,
+    pub session_id: Uuid,
+    pub workspace_id: Uuid,
+    pub repo_id: Uuid,
+    pub after_head_commit: Option<String>,
+    pub prev_after_head_commit: Option<String>,
+    pub target_branch: String,
+    pub repo_path: Option<String>,
+}
+
 impl ExecutionProcess {
-    /// Find execution process by ID
     pub async fn find_by_id(pool: &SqlitePool, id: Uuid) -> Result<Option<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            ExecutionProcess,
-            r#"SELECT
-                    ep.id as "id!: Uuid",
-                    ep.session_id as "session_id!: Uuid",
-                    ep.run_reason as "run_reason!: ExecutionProcessRunReason",
-                    ep.executor_action as "executor_action!: sqlx::types::Json<ExecutorActionField>",
-                    ep.status as "status!: ExecutionProcessStatus",
-                    ep.exit_code,
-                    ep.dropped as "dropped!: bool",
-                    ep.started_at as "started_at!: DateTime<Utc>",
-                    ep.completed_at as "completed_at?: DateTime<Utc>",
-                    ep.created_at as "created_at!: DateTime<Utc>",
-                    ep.updated_at as "updated_at!: DateTime<Utc>"
-               FROM execution_processes ep WHERE ep.id = ?"#,
-            id
+        sqlx::query_as::<_, ExecutionProcess>(
+            r#"SELECT id, session_id, run_reason, executor_action, status, exit_code,
+                      dropped, started_at, completed_at, created_at, updated_at
+               FROM execution_processes WHERE id = $1"#,
         )
+        .bind(id)
         .fetch_optional(pool)
         .await
     }
 
-    /// Context for backfilling before_head_commit for legacy rows
-    /// List processes that have after_head_commit set but missing before_head_commit, with join context
     pub async fn list_missing_before_context(
         pool: &SqlitePool,
     ) -> Result<Vec<MissingBeforeContext>, sqlx::Error> {
-        let rows = sqlx::query!(
+        let rows = sqlx::query_as::<_, MissingBeforeContextRow>(
             r#"SELECT
-                ep.id                         as "id!: Uuid",
-                ep.session_id                 as "session_id!: Uuid",
-                s.workspace_id                as "workspace_id!: Uuid",
-                eprs.repo_id                  as "repo_id!: Uuid",
-                eprs.after_head_commit        as after_head_commit,
-                prev.after_head_commit        as prev_after_head_commit,
-                wr.target_branch              as "target_branch!",
-                r.path                        as repo_path
+                ep.id, ep.session_id, s.workspace_id, eprs.repo_id,
+                eprs.after_head_commit, prev.after_head_commit as prev_after_head_commit,
+                wr.target_branch, r.path as repo_path
             FROM execution_processes ep
             JOIN sessions s ON s.id = ep.session_id
             JOIN execution_process_repo_states eprs ON eprs.execution_process_id = ep.id
@@ -183,7 +172,7 @@ impl ExecutionProcess {
                )
               AND prev.repo_id = eprs.repo_id
             WHERE eprs.before_head_commit IS NULL
-              AND eprs.after_head_commit IS NOT NULL"#
+              AND eprs.after_head_commit IS NOT NULL"#,
         )
         .fetch_all(pool)
         .await?;
@@ -197,226 +186,162 @@ impl ExecutionProcess {
                 repo_id: r.repo_id,
                 prev_after_head_commit: r.prev_after_head_commit,
                 target_branch: r.target_branch,
-                repo_path: Some(r.repo_path),
+                repo_path: r.repo_path,
             })
             .collect();
         Ok(result)
     }
 
-    /// Find execution process by rowid
     pub async fn find_by_rowid(pool: &SqlitePool, rowid: i64) -> Result<Option<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            ExecutionProcess,
-            r#"SELECT
-                    ep.id as "id!: Uuid",
-                    ep.session_id as "session_id!: Uuid",
-                    ep.run_reason as "run_reason!: ExecutionProcessRunReason",
-                    ep.executor_action as "executor_action!: sqlx::types::Json<ExecutorActionField>",
-                    ep.status as "status!: ExecutionProcessStatus",
-                    ep.exit_code,
-                    ep.dropped as "dropped!: bool",
-                    ep.started_at as "started_at!: DateTime<Utc>",
-                    ep.completed_at as "completed_at?: DateTime<Utc>",
-                    ep.created_at as "created_at!: DateTime<Utc>",
-                    ep.updated_at as "updated_at!: DateTime<Utc>"
-               FROM execution_processes ep WHERE ep.rowid = ?"#,
-            rowid
+        sqlx::query_as::<_, ExecutionProcess>(
+            r#"SELECT id, session_id, run_reason, executor_action, status, exit_code,
+                      dropped, started_at, completed_at, created_at, updated_at
+               FROM execution_processes WHERE rowid = $1"#,
         )
+        .bind(rowid)
         .fetch_optional(pool)
         .await
     }
 
-    /// Find all execution processes for a session (optionally include soft-deleted)
     pub async fn find_by_session_id(
         pool: &SqlitePool,
         session_id: Uuid,
         show_soft_deleted: bool,
     ) -> Result<Vec<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            ExecutionProcess,
-            r#"SELECT
-                      ep.id              as "id!: Uuid",
-                      ep.session_id      as "session_id!: Uuid",
-                      ep.run_reason      as "run_reason!: ExecutionProcessRunReason",
-                      ep.executor_action as "executor_action!: sqlx::types::Json<ExecutorActionField>",
-                      ep.status          as "status!: ExecutionProcessStatus",
-                      ep.exit_code,
-                      ep.dropped as "dropped!: bool",
-                      ep.started_at      as "started_at!: DateTime<Utc>",
-                      ep.completed_at    as "completed_at?: DateTime<Utc>",
-                      ep.created_at      as "created_at!: DateTime<Utc>",
-                      ep.updated_at      as "updated_at!: DateTime<Utc>"
-               FROM execution_processes ep
-               WHERE ep.session_id = ?
-                 AND (? OR ep.dropped = FALSE)
-               ORDER BY ep.created_at ASC"#,
-            session_id,
-            show_soft_deleted
-        )
-        .fetch_all(pool)
-        .await
+        if show_soft_deleted {
+            sqlx::query_as::<_, ExecutionProcess>(
+                r#"SELECT id, session_id, run_reason, executor_action, status, exit_code,
+                          dropped, started_at, completed_at, created_at, updated_at
+                   FROM execution_processes
+                   WHERE session_id = $1
+                   ORDER BY created_at ASC"#,
+            )
+            .bind(session_id)
+            .fetch_all(pool)
+            .await
+        } else {
+            sqlx::query_as::<_, ExecutionProcess>(
+                r#"SELECT id, session_id, run_reason, executor_action, status, exit_code,
+                          dropped, started_at, completed_at, created_at, updated_at
+                   FROM execution_processes
+                   WHERE session_id = $1 AND dropped = 0
+                   ORDER BY created_at ASC"#,
+            )
+            .bind(session_id)
+            .fetch_all(pool)
+            .await
+        }
     }
 
-    /// Find running execution processes
     pub async fn find_running(pool: &SqlitePool) -> Result<Vec<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            ExecutionProcess,
-            r#"SELECT
-                    ep.id as "id!: Uuid",
-                    ep.session_id as "session_id!: Uuid",
-                    ep.run_reason as "run_reason!: ExecutionProcessRunReason",
-                    ep.executor_action as "executor_action!: sqlx::types::Json<ExecutorActionField>",
-                    ep.status as "status!: ExecutionProcessStatus",
-                    ep.exit_code,
-                    ep.dropped as "dropped!: bool",
-                    ep.started_at as "started_at!: DateTime<Utc>",
-                    ep.completed_at as "completed_at?: DateTime<Utc>",
-                    ep.created_at as "created_at!: DateTime<Utc>",
-                    ep.updated_at as "updated_at!: DateTime<Utc>"
-               FROM execution_processes ep WHERE ep.status = 'running' ORDER BY ep.created_at ASC"#,
+        sqlx::query_as::<_, ExecutionProcess>(
+            r#"SELECT id, session_id, run_reason, executor_action, status, exit_code,
+                      dropped, started_at, completed_at, created_at, updated_at
+               FROM execution_processes WHERE status = 'running' ORDER BY created_at ASC"#,
         )
         .fetch_all(pool)
         .await
     }
 
-    /// Check if there's a running coding agent process for a session
     pub async fn has_running_coding_agent_for_session(
         pool: &SqlitePool,
         session_id: Uuid,
     ) -> Result<bool, sqlx::Error> {
-        let count: i64 = sqlx::query_scalar!(
-            r#"SELECT COUNT(*) as "count!: i64"
-               FROM execution_processes ep
-               WHERE ep.session_id = $1
-                 AND ep.status = 'running'
-                 AND ep.run_reason = 'codingagent'"#,
-            session_id
+        let count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM execution_processes ep
+               WHERE ep.session_id = $1 AND ep.status = 'running' AND ep.run_reason = 'codingagent'"#,
         )
+        .bind(session_id)
         .fetch_one(pool)
         .await?;
         Ok(count > 0)
     }
 
-    /// Check if there are running processes (excluding dev servers) for a workspace (across all sessions)
     pub async fn has_running_non_dev_server_processes_for_workspace(
         pool: &SqlitePool,
         workspace_id: Uuid,
     ) -> Result<bool, sqlx::Error> {
-        let count: i64 = sqlx::query_scalar!(
-            r#"SELECT COUNT(*) as "count!: i64"
-               FROM execution_processes ep
+        let count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM execution_processes ep
                JOIN sessions s ON ep.session_id = s.id
-               WHERE s.workspace_id = $1
-                 AND ep.status = 'running'
-                 AND ep.run_reason != 'devserver'"#,
-            workspace_id
+               WHERE s.workspace_id = $1 AND ep.status = 'running' AND ep.run_reason != 'devserver'"#,
         )
+        .bind(workspace_id)
         .fetch_one(pool)
         .await?;
         Ok(count > 0)
     }
 
-    /// Find running dev servers for a specific workspace (across all sessions)
     pub async fn find_running_dev_servers_by_workspace(
         pool: &SqlitePool,
         workspace_id: Uuid,
     ) -> Result<Vec<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            ExecutionProcess,
-            r#"
-        SELECT
-            ep.id as "id!: Uuid",
-            ep.session_id as "session_id!: Uuid",
-            ep.run_reason as "run_reason!: ExecutionProcessRunReason",
-            ep.executor_action as "executor_action!: sqlx::types::Json<ExecutorActionField>",
-            ep.status as "status!: ExecutionProcessStatus",
-            ep.exit_code,
-            ep.dropped as "dropped!: bool",
-            ep.started_at as "started_at!: DateTime<Utc>",
-            ep.completed_at as "completed_at?: DateTime<Utc>",
-            ep.created_at as "created_at!: DateTime<Utc>",
-            ep.updated_at as "updated_at!: DateTime<Utc>"
-        FROM execution_processes ep
-        JOIN sessions s ON ep.session_id = s.id
-        WHERE s.workspace_id = ?
-          AND ep.status = 'running'
-          AND ep.run_reason = 'devserver'
-        ORDER BY ep.created_at DESC
-        "#,
-            workspace_id
+        sqlx::query_as::<_, ExecutionProcess>(
+            r#"SELECT ep.id, ep.session_id, ep.run_reason, ep.executor_action, ep.status,
+                      ep.exit_code, ep.dropped, ep.started_at, ep.completed_at, ep.created_at, ep.updated_at
+               FROM execution_processes ep
+               JOIN sessions s ON ep.session_id = s.id
+               WHERE s.workspace_id = $1 AND ep.status = 'running' AND ep.run_reason = 'devserver'
+               ORDER BY ep.created_at DESC"#,
         )
+        .bind(workspace_id)
         .fetch_all(pool)
         .await
     }
 
-    /// Find latest execution process by session and run reason
     pub async fn find_latest_by_session_and_run_reason(
         pool: &SqlitePool,
         session_id: Uuid,
         run_reason: &ExecutionProcessRunReason,
     ) -> Result<Option<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            ExecutionProcess,
-            r#"SELECT
-                    ep.id as "id!: Uuid",
-                    ep.session_id as "session_id!: Uuid",
-                    ep.run_reason as "run_reason!: ExecutionProcessRunReason",
-                    ep.executor_action as "executor_action!: sqlx::types::Json<ExecutorActionField>",
-                    ep.status as "status!: ExecutionProcessStatus",
-                    ep.exit_code,
-                    ep.dropped as "dropped!: bool",
-                    ep.started_at as "started_at!: DateTime<Utc>",
-                    ep.completed_at as "completed_at?: DateTime<Utc>",
-                    ep.created_at as "created_at!: DateTime<Utc>",
-                    ep.updated_at as "updated_at!: DateTime<Utc>"
-               FROM execution_processes ep
-               WHERE ep.session_id = ? AND ep.run_reason = ? AND ep.dropped = FALSE
-               ORDER BY ep.created_at DESC LIMIT 1"#,
-            session_id,
-            run_reason
+        let run_reason_str = match run_reason {
+            ExecutionProcessRunReason::SetupScript => "setupscript",
+            ExecutionProcessRunReason::CleanupScript => "cleanupscript",
+            ExecutionProcessRunReason::ArchiveScript => "archivescript",
+            ExecutionProcessRunReason::CodingAgent => "codingagent",
+            ExecutionProcessRunReason::DevServer => "devserver",
+        };
+
+        sqlx::query_as::<_, ExecutionProcess>(
+            r#"SELECT id, session_id, run_reason, executor_action, status, exit_code,
+                      dropped, started_at, completed_at, created_at, updated_at
+               FROM execution_processes
+               WHERE session_id = $1 AND run_reason = $2 AND dropped = 0
+               ORDER BY created_at DESC LIMIT 1"#,
         )
+        .bind(session_id)
+        .bind(run_reason_str)
         .fetch_optional(pool)
         .await
     }
 
-    /// Find latest execution process by workspace and run reason (across all sessions)
     pub async fn find_latest_by_workspace_and_run_reason(
         pool: &SqlitePool,
         workspace_id: Uuid,
         run_reason: &ExecutionProcessRunReason,
     ) -> Result<Option<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            ExecutionProcess,
-            r#"SELECT
-                    ep.id as "id!: Uuid",
-                    ep.session_id as "session_id!: Uuid",
-                    ep.run_reason as "run_reason!: ExecutionProcessRunReason",
-                    ep.executor_action as "executor_action!: sqlx::types::Json<ExecutorActionField>",
-                    ep.status as "status!: ExecutionProcessStatus",
-                    ep.exit_code,
-                    ep.dropped as "dropped!: bool",
-                    ep.started_at as "started_at!: DateTime<Utc>",
-                    ep.completed_at as "completed_at?: DateTime<Utc>",
-                    ep.created_at as "created_at!: DateTime<Utc>",
-                    ep.updated_at as "updated_at!: DateTime<Utc>"
+        let run_reason_str = match run_reason {
+            ExecutionProcessRunReason::SetupScript => "setupscript",
+            ExecutionProcessRunReason::CleanupScript => "cleanupscript",
+            ExecutionProcessRunReason::ArchiveScript => "archivescript",
+            ExecutionProcessRunReason::CodingAgent => "codingagent",
+            ExecutionProcessRunReason::DevServer => "devserver",
+        };
+
+        sqlx::query_as::<_, ExecutionProcess>(
+            r#"SELECT ep.id, ep.session_id, ep.run_reason, ep.executor_action, ep.status,
+                      ep.exit_code, ep.dropped, ep.started_at, ep.completed_at, ep.created_at, ep.updated_at
                FROM execution_processes ep
                JOIN sessions s ON ep.session_id = s.id
-               WHERE s.workspace_id = ? AND ep.run_reason = ? AND ep.dropped = FALSE
+               WHERE s.workspace_id = $1 AND ep.run_reason = $2 AND ep.dropped = 0
                ORDER BY ep.created_at DESC LIMIT 1"#,
-            workspace_id,
-            run_reason
         )
+        .bind(workspace_id)
+        .bind(run_reason_str)
         .fetch_optional(pool)
         .await
     }
 
-    /// Create a new execution process
-    ///
-    /// Note: We intentionally avoid using a transaction here. SQLite update
-    /// hooks fire during transactions (before commit), and the hook spawns an
-    /// async task that queries `find_by_rowid` on a different connection.
-    /// If we used a transaction, that query would not see the uncommitted row,
-    /// causing the WebSocket event to be lost.
     pub async fn create(
         pool: &SqlitePool,
         data: &CreateExecutionProcess,
@@ -426,22 +351,25 @@ impl ExecutionProcess {
         let now = Utc::now();
         let executor_action_json = sqlx::types::Json(&data.executor_action);
 
-        sqlx::query!(
+        let run_reason_str = match data.run_reason {
+            ExecutionProcessRunReason::SetupScript => "setupscript",
+            ExecutionProcessRunReason::CleanupScript => "cleanupscript",
+            ExecutionProcessRunReason::ArchiveScript => "archivescript",
+            ExecutionProcessRunReason::CodingAgent => "codingagent",
+            ExecutionProcessRunReason::DevServer => "devserver",
+        };
+
+        sqlx::query(
             r#"INSERT INTO execution_processes (
                     id, session_id, run_reason, executor_action,
-                    status, exit_code, started_at, completed_at, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-            process_id,
-            data.session_id,
-            data.run_reason,
-            executor_action_json,
-            ExecutionProcessStatus::Running,
-            None::<i64>,
-            now,
-            None::<DateTime<Utc>>,
-            now,
-            now
+                    status, exit_code, dropped, started_at, completed_at, created_at, updated_at
+                ) VALUES ($1, $2, $3, $4, 'running', NULL, 0, $5, NULL, $5, $5)"#,
         )
+        .bind(process_id)
+        .bind(data.session_id)
+        .bind(run_reason_str)
+        .bind(executor_action_json)
+        .bind(now)
         .execute(pool)
         .await?;
 
@@ -464,7 +392,6 @@ impl ExecutionProcess {
         false
     }
 
-    /// Update execution process status and completion info
     pub async fn update_completion(
         pool: &SqlitePool,
         id: Uuid,
@@ -477,15 +404,22 @@ impl ExecutionProcess {
             Some(Utc::now())
         };
 
-        sqlx::query!(
+        let status_str = match status {
+            ExecutionProcessStatus::Running => "running",
+            ExecutionProcessStatus::Completed => "completed",
+            ExecutionProcessStatus::Failed => "failed",
+            ExecutionProcessStatus::Killed => "killed",
+        };
+
+        sqlx::query(
             r#"UPDATE execution_processes
-               SET status = $1, exit_code = $2, completed_at = $3
+               SET status = $1, exit_code = $2, completed_at = $3, updated_at = datetime('now', 'subsec')
                WHERE id = $4"#,
-            status,
-            exit_code,
-            completed_at,
-            id
         )
+        .bind(status_str)
+        .bind(exit_code)
+        .bind(completed_at)
+        .bind(id)
         .execute(pool)
         .await?;
 
@@ -501,35 +435,32 @@ impl ExecutionProcess {
         }
     }
 
-    /// Soft-drop processes at and after the specified boundary (inclusive)
     pub async fn drop_at_and_after(
         pool: &SqlitePool,
         session_id: Uuid,
         boundary_process_id: Uuid,
     ) -> Result<i64, sqlx::Error> {
-        let result = sqlx::query!(
+        let result = sqlx::query(
             r#"UPDATE execution_processes
-               SET dropped = TRUE
+               SET dropped = 1
              WHERE session_id = $1
                AND created_at >= (SELECT created_at FROM execution_processes WHERE id = $2)
-               AND dropped = FALSE"#,
-            session_id,
-            boundary_process_id
+               AND dropped = 0"#,
         )
+        .bind(session_id)
+        .bind(boundary_process_id)
         .execute(pool)
         .await?;
         Ok(result.rows_affected() as i64)
     }
 
-    /// Find the previous process's after_head_commit before the given boundary process
-    /// for a specific repository
     pub async fn find_prev_after_head_commit(
         pool: &SqlitePool,
         session_id: Uuid,
         boundary_process_id: Uuid,
         repo_id: Uuid,
     ) -> Result<Option<String>, sqlx::Error> {
-        let result = sqlx::query_scalar!(
+        let result: Option<String> = sqlx::query_scalar(
             r#"SELECT eprs.after_head_commit
                FROM execution_process_repo_states eprs
                JOIN execution_processes ep ON ep.id = eprs.execution_process_id
@@ -538,21 +469,19 @@ impl ExecutionProcess {
                 AND ep.created_at < (SELECT created_at FROM execution_processes WHERE id = $3)
               ORDER BY ep.created_at DESC
               LIMIT 1"#,
-            session_id,
-            repo_id,
-            boundary_process_id
         )
+        .bind(session_id)
+        .bind(repo_id)
+        .bind(boundary_process_id)
         .fetch_optional(pool)
         .await?;
-        Ok(result.flatten())
+        Ok(result)
     }
 
-    /// Get the parent Session for this execution process
     pub async fn parent_session(&self, pool: &SqlitePool) -> Result<Option<Session>, sqlx::Error> {
         Session::find_by_id(pool, self.session_id).await
     }
 
-    /// Get both the parent Workspace and Session for this execution process
     pub async fn parent_workspace_and_session(
         &self,
         pool: &SqlitePool,
@@ -568,7 +497,6 @@ impl ExecutionProcess {
         Ok(Some((workspace, session)))
     }
 
-    /// Load execution context with related session, workspace, task, project, and repos
     pub async fn load_context(
         pool: &SqlitePool,
         exec_id: Uuid,
@@ -595,33 +523,18 @@ impl ExecutionProcess {
         })
     }
 
-    /// Fetch the latest CodingAgent executor profile for a session.
-    /// Returns None if no CodingAgent execution process exists for this session.
     pub async fn latest_executor_profile_for_session(
         pool: &SqlitePool,
         session_id: Uuid,
     ) -> Result<Option<ExecutorProfileId>, ExecutionProcessError> {
-        // Find the latest CodingAgent execution process for this session
-        let latest_execution_process = sqlx::query_as!(
-            ExecutionProcess,
-            r#"SELECT
-                    ep.id as "id!: Uuid",
-                    ep.session_id as "session_id!: Uuid",
-                    ep.run_reason as "run_reason!: ExecutionProcessRunReason",
-                    ep.executor_action as "executor_action!: sqlx::types::Json<ExecutorActionField>",
-                    ep.status as "status!: ExecutionProcessStatus",
-                    ep.exit_code,
-                    ep.dropped as "dropped!: bool",
-                    ep.started_at as "started_at!: DateTime<Utc>",
-                    ep.completed_at as "completed_at?: DateTime<Utc>",
-                    ep.created_at as "created_at!: DateTime<Utc>",
-                    ep.updated_at as "updated_at!: DateTime<Utc>"
-               FROM execution_processes ep
-               WHERE ep.session_id = ? AND ep.run_reason = ? AND ep.dropped = FALSE
-               ORDER BY ep.created_at DESC LIMIT 1"#,
-            session_id,
-            ExecutionProcessRunReason::CodingAgent
+        let latest_execution_process = sqlx::query_as::<_, ExecutionProcess>(
+            r#"SELECT id, session_id, run_reason, executor_action, status, exit_code,
+                      dropped, started_at, completed_at, created_at, updated_at
+               FROM execution_processes
+               WHERE session_id = $1 AND run_reason = 'codingagent' AND dropped = 0
+               ORDER BY created_at DESC LIMIT 1"#,
         )
+        .bind(session_id)
         .fetch_optional(pool)
         .await?;
 
@@ -649,22 +562,14 @@ impl ExecutionProcess {
         }
     }
 
-    /// Fetch latest execution process info for all workspaces with the given archived status.
-    /// Returns a map of workspace_id -> LatestProcessInfo for the most recent
-    /// non-dropped execution process (excluding dev servers).
     pub async fn find_latest_for_workspaces(
         pool: &SqlitePool,
         archived: bool,
     ) -> Result<HashMap<Uuid, LatestProcessInfo>, sqlx::Error> {
-        let rows: Vec<LatestProcessInfo> = sqlx::query_as!(
-            LatestProcessInfo,
-            r#"
-            SELECT
-                workspace_id as "workspace_id!: Uuid",
-                execution_process_id as "execution_process_id!: Uuid",
-                session_id as "session_id!: Uuid",
-                status as "status!: ExecutionProcessStatus",
-                completed_at as "completed_at?: DateTime<Utc>"
+        let archived_val: i32 = if archived { 1 } else { 0 };
+
+        let rows: Vec<LatestProcessInfo> = sqlx::query_as::<_, LatestProcessInfo>(
+            r#"SELECT workspace_id, execution_process_id, session_id, status, completed_at
             FROM (
                 SELECT
                     s.workspace_id,
@@ -681,12 +586,11 @@ impl ExecutionProcess {
                 JOIN workspaces w ON s.workspace_id = w.id
                 WHERE w.archived = $1
                   AND ep.run_reason IN ('codingagent', 'setupscript', 'cleanupscript')
-                  AND ep.dropped = FALSE
+                  AND ep.dropped = 0
             )
-            WHERE rn = 1
-            "#,
-            archived
+            WHERE rn = 1"#,
         )
+        .bind(archived_val)
         .fetch_all(pool)
         .await?;
 
@@ -698,27 +602,23 @@ impl ExecutionProcess {
         Ok(result)
     }
 
-    /// Find all workspaces with running dev servers, filtered by archived status.
-    /// Returns a set of workspace IDs that have at least one running dev server.
     pub async fn find_workspaces_with_running_dev_servers(
         pool: &SqlitePool,
         archived: bool,
     ) -> Result<HashSet<Uuid>, sqlx::Error> {
-        let rows: Vec<Uuid> = sqlx::query_scalar!(
-            r#"
-            SELECT DISTINCT s.workspace_id as "workspace_id!: Uuid"
+        let archived_val: i32 = if archived { 1 } else { 0 };
+
+        let rows: Vec<(Uuid,)> = sqlx::query_as(
+            r#"SELECT DISTINCT s.workspace_id
             FROM execution_processes ep
             JOIN sessions s ON ep.session_id = s.id
             JOIN workspaces w ON s.workspace_id = w.id
-            WHERE w.archived = $1
-              AND ep.status = 'running'
-              AND ep.run_reason = 'devserver'
-            "#,
-            archived
+            WHERE w.archived = $1 AND ep.status = 'running' AND ep.run_reason = 'devserver'"#,
         )
+        .bind(archived_val)
         .fetch_all(pool)
         .await?;
 
-        Ok(rows.into_iter().collect())
+        Ok(rows.into_iter().map(|(id,)| id).collect())
     }
 }

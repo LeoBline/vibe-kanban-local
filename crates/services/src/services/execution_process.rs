@@ -75,6 +75,7 @@ pub async fn migrate_execution_logs_to_files() -> Result<()> {
     let completed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
 
     ExecutionProcessLogs::stream_distinct_processes(&pool)
+        .await
         .map_err(anyhow::Error::from)
         .map(|res| {
             let pool = pool.clone();
@@ -105,7 +106,8 @@ pub async fn migrate_execution_logs_to_files() -> Result<()> {
                     .await?;
 
                 let mut logs_stream =
-                    ExecutionProcessLogs::stream_log_lines_by_execution_id(&pool, &p.execution_id);
+                    ExecutionProcessLogs::stream_log_lines_by_execution_id(&pool, p.execution_id)
+                        .await;
                 let mut has_logs = false;
                 while let Some(log_res) = logs_stream.next().await {
                     let log = log_res?;

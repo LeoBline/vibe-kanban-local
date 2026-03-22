@@ -48,6 +48,7 @@ import {
 import { AppBarNotificationBellContainer } from '@/pages/workspaces/AppBarNotificationBellContainer';
 import { WorkspacesSidebarContainer } from '@/pages/workspaces/WorkspacesSidebarContainer';
 import { WorkspacesSidebarReopenTag } from '@vibe/ui/components/WorkspacesSidebar';
+import { useLocalOrganizationStore } from '@/shared/stores/useLocalOrganizationStore';
 
 export function SharedAppLayout() {
   const appNavigation = useAppNavigation();
@@ -120,7 +121,7 @@ export function SharedAppLayout() {
     isLoading,
     updateMany: updateManyProjects,
   } = useShape(PROJECTS_SHAPE, projectParams, {
-    enabled: isSignedIn && !!selectedOrgId,
+    enabled: !!selectedOrgId,
     mutation: PROJECT_MUTATION,
   });
   const sortedProjects = useMemo(
@@ -250,19 +251,32 @@ export function SharedAppLayout() {
   }, [setSelectedOrgId]);
 
   const handleCreateProject = useCallback(async () => {
-    if (!selectedOrgId) return;
+    console.log('[DEBUG] handleCreateProject called', { isSignedIn, selectedOrgId });
+    let orgId = selectedOrgId;
+
+    const localOrgStore = useLocalOrganizationStore.getState();
+
+    if (!orgId) {
+      console.log('[DEBUG] No org selected, creating local org');
+      const newOrg = localOrgStore.createOrganization('My Workspace', `workspace-${Date.now()}`);
+      orgId = newOrg.id;
+      setSelectedOrgId(orgId);
+      console.log('[DEBUG] Created org:', orgId);
+    }
 
     try {
+      console.log('[DEBUG] Opening CreateRemoteProjectDialog with orgId:', orgId);
       const result: CreateRemoteProjectResult =
-        await CreateRemoteProjectDialog.show({ organizationId: selectedOrgId });
+        await CreateRemoteProjectDialog.show({ organizationId: orgId, isLocalMode: true });
+      console.log('[DEBUG] Dialog result:', result);
 
       if (result.action === 'created' && result.project) {
         appNavigation.goToProject(result.project.id);
       }
-    } catch {
-      // Dialog cancelled
+    } catch (err) {
+      console.error('[DEBUG] Dialog error:', err);
     }
-  }, [selectedOrgId, appNavigation]);
+  }, [selectedOrgId, setSelectedOrgId, appNavigation]);
 
   const handleSignIn = useCallback(async () => {
     try {
@@ -436,7 +450,7 @@ export function SharedAppLayout() {
 
             {/* Project list */}
             <div className="flex-1 overflow-y-auto p-2">
-              {isSignedIn ? (
+              {orderedProjects.length > 0 ? (
                 orderedProjects.map((project) => (
                   <button
                     type="button"
@@ -467,31 +481,21 @@ export function SharedAppLayout() {
                     weight="bold"
                   />
                   <p className="mt-3 text-sm font-medium text-high">
-                    Kanban Boards
+                    No Projects Yet
                   </p>
                   <p className="mt-1 text-xs text-low">
-                    Sign in to organise your coding agents with kanban boards.
+                    Create a project to start organizing your coding tasks.
                   </p>
                   <div className="mt-4 flex flex-col gap-2">
                     <button
                       type="button"
                       onClick={() => {
-                        handleSignIn();
+                        handleCreateProject();
                         setIsDrawerOpen(false);
                       }}
                       className="w-full px-3 py-2 rounded-md text-sm font-medium bg-brand text-on-brand hover:bg-brand-hover cursor-pointer"
                     >
-                      Sign in
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleMigrate();
-                        setIsDrawerOpen(false);
-                      }}
-                      className="w-full px-3 py-2 rounded-md text-sm text-normal bg-secondary hover:bg-panel border border-border cursor-pointer"
-                    >
-                      Migrate old projects
+                      Create Project
                     </button>
                   </div>
                 </div>
@@ -499,21 +503,19 @@ export function SharedAppLayout() {
             </div>
 
             {/* Create Project button */}
-            {isSignedIn && (
-              <div className="p-3 border-t border-border">
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleCreateProject();
-                    setIsDrawerOpen(false);
-                  }}
-                  className="flex items-center gap-2 w-full px-3 py-2.5 rounded-md text-sm text-low hover:text-normal hover:bg-secondary cursor-pointer"
-                >
-                  <PlusIcon className="h-4 w-4" />
-                  Create Project
-                </button>
-              </div>
-            )}
+            <div className="p-3 border-t border-border">
+              <button
+                type="button"
+                onClick={() => {
+                  handleCreateProject();
+                  setIsDrawerOpen(false);
+                }}
+                className="flex items-center gap-2 w-full px-3 py-2.5 rounded-md text-sm text-low hover:text-normal hover:bg-secondary cursor-pointer"
+              >
+                <PlusIcon className="h-4 w-4" />
+                Create Project
+              </button>
+            </div>
           </div>
         </MobileDrawer>
       </div>

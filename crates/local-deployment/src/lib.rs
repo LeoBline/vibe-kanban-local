@@ -335,10 +335,21 @@ impl LocalDeployment {
     }
 
     pub async fn get_login_status(&self) -> LoginStatus {
+        use api_types::ProfileResponse;
+        
+        // --- LOCAL MODE MODIFICATION ---
+        // If no credentials are found, return a default local profile instead of LoggedOut
         if self.auth_context.get_credentials().await.is_none() {
-            self.auth_context.clear_profile().await;
-            return LoginStatus::LoggedOut;
+            return LoginStatus::LoggedIn {
+                profile: ProfileResponse {
+                    user_id: Uuid::nil(),
+                    username: Some("LocalUser".to_string()),
+                    email: "local@vibe.dev".to_string(),
+                    providers: vec![],
+                },
+            };
         };
+        // -------------------------------
 
         if let Some(cached_profile) = self.auth_context.cached_profile().await {
             return LoginStatus::LoggedIn {

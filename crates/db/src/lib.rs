@@ -19,8 +19,9 @@ async fn run_migrations(pool: &Pool<Sqlite>) -> Result<(), Error> {
         match migrator.run(pool).await {
             Ok(()) => return Ok(()),
             Err(MigrateError::VersionMismatch(version)) => {
-                if cfg!(debug_assertions) {
+                if cfg!(debug_assertions) && !cfg!(windows) {
                     // return the error in debug mode to catch migration issues early
+                    // but allow auto-fix on Windows due to line ending issues
                     return Err(sqlx::Error::Migrate(Box::new(
                         MigrateError::VersionMismatch(version),
                     )));

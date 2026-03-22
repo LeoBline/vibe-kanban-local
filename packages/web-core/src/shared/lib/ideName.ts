@@ -22,5 +22,7 @@ export function getIdeName(editorType: EditorType | undefined | null): string {
       return i18n.t('common:editorNames.custom');
     case EditorType.GOOGLE_ANTIGRAVITY:
       return 'Antigravity';
+    case EditorType.TRAE:
+      return 'Trae';
   }
 }

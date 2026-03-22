@@ -3,17 +3,18 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_with::rust::double_option;
-use sqlx::{Executor, FromRow, Sqlite, SqlitePool};
+use sqlx::{FromRow, SqlitePool};
 use thiserror::Error;
 use ts_rs::TS;
 use uuid::Uuid;
+
+pub type RepoTuple = (Uuid, String, String, String, Option<String>, Option<String>, Option<String>, Option<String>, bool, Option<String>, Option<String>, Option<String>, DateTime<Utc>, DateTime<Utc>);
 
 #[derive(Debug, Serialize, TS)]
 pub struct SearchResult {
     pub path: String,
     pub is_file: bool,
     pub match_type: SearchMatchType,
-    /// Ranking score based on git history (higher = more recently/frequently edited)
     #[serde(default)]
     pub score: i64,
 }
@@ -129,30 +130,36 @@ pub struct UpdateRepo {
 }
 
 impl Repo {
-    /// Get repos that still have the migration sentinel as their name.
-    /// Used by the startup backfill to fix repo names.
+    fn from_tuple(t: RepoTuple) -> Self {
+        Repo {
+            id: t.0,
+            path: PathBuf::from(t.1),
+            name: t.2,
+            display_name: t.3,
+            setup_script: t.4,
+            cleanup_script: t.5,
+            archive_script: t.6,
+            copy_files: t.7,
+            parallel_setup_script: t.8,
+            dev_server_script: t.9,
+            default_target_branch: t.10,
+            default_working_dir: t.11,
+            created_at: t.12,
+            updated_at: t.13,
+        }
+    }
+
     pub async fn list_needing_name_fix(pool: &SqlitePool) -> Result<Vec<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            Repo,
-            r#"SELECT id as "id!: Uuid",
-                      path,
-                      name,
-                      display_name,
-                      setup_script,
-                      cleanup_script,
-                      archive_script,
-                      copy_files,
-                      parallel_setup_script as "parallel_setup_script!: bool",
-                      dev_server_script,
-                      default_target_branch,
-                      default_working_dir,
-                      created_at as "created_at!: DateTime<Utc>",
-                      updated_at as "updated_at!: DateTime<Utc>"
+        let rows = sqlx::query_as::<_, RepoTuple>(
+            r#"SELECT id, path, name, display_name, setup_script, cleanup_script,
+                      archive_script, copy_files, parallel_setup_script, dev_server_script,
+                      default_target_branch, default_working_dir, created_at, updated_at
                FROM repos
-               WHERE name = '__NEEDS_BACKFILL__'"#
+               WHERE name = '__NEEDS_BACKFILL__'"#,
         )
         .fetch_all(pool)
-        .await
+        .await?;
+        Ok(rows.into_iter().map(Self::from_tuple).collect())
     }
 
     pub async fn update_name(
@@ -161,40 +168,29 @@ impl Repo {
         name: &str,
         display_name: &str,
     ) -> Result<(), sqlx::Error> {
-        sqlx::query!(
+        sqlx::query(
             "UPDATE repos SET name = $1, display_name = $2, updated_at = datetime('now', 'subsec') WHERE id = $3",
-            name,
-            display_name,
-            id
         )
+        .bind(name)
+        .bind(display_name)
+        .bind(id)
         .execute(pool)
         .await?;
         Ok(())
     }
 
     pub async fn find_by_id(pool: &SqlitePool, id: Uuid) -> Result<Option<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            Repo,
-            r#"SELECT id as "id!: Uuid",
-                      path,
-                      name,
-                      display_name,
-                      setup_script,
-                      cleanup_script,
-                      archive_script,
-                      copy_files,
-                      parallel_setup_script as "parallel_setup_script!: bool",
-                      dev_server_script,
-                      default_target_branch,
-                      default_working_dir,
-                      created_at as "created_at!: DateTime<Utc>",
-                      updated_at as "updated_at!: DateTime<Utc>"
+        let row = sqlx::query_as::<_, RepoTuple>(
+            r#"SELECT id, path, name, display_name, setup_script, cleanup_script,
+                      archive_script, copy_files, parallel_setup_script, dev_server_script,
+                      default_target_branch, default_working_dir, created_at, updated_at
                FROM repos
                WHERE id = $1"#,
-            id
         )
+        .bind(id)
         .fetch_optional(pool)
-        .await
+        .await?;
+        Ok(row.map(Self::from_tuple))
     }
 
     pub async fn find_by_ids(pool: &SqlitePool, ids: &[Uuid]) -> Result<Vec<Self>, sqlx::Error> {
@@ -202,7 +198,6 @@ impl Repo {
             return Ok(Vec::new());
         }
 
-        // Fetch each repo individually since SQLite doesn't support array parameters
         let mut repos = Vec::with_capacity(ids.len());
         for id in ids {
             if let Some(repo) = Self::find_by_id(pool, *id).await? {
@@ -212,14 +207,11 @@ impl Repo {
         Ok(repos)
     }
 
-    pub async fn find_or_create<'e, E>(
-        executor: E,
+    pub async fn find_or_create(
+        pool: &SqlitePool,
         path: &Path,
         display_name: &str,
-    ) -> Result<Self, sqlx::Error>
-    where
-        E: Executor<'e, Database = Sqlite>,
-    {
+    ) -> Result<Self, sqlx::Error> {
         let path_str = path.to_string_lossy().to_string();
         let id = Uuid::new_v4();
         let repo_name = path
@@ -227,40 +219,38 @@ impl Repo {
             .map(|name| name.to_string_lossy().to_string())
             .unwrap_or_else(|| id.to_string());
 
-        // Use INSERT OR IGNORE + SELECT to handle race conditions atomically
-        sqlx::query_as!(
-            Repo,
-            r#"INSERT INTO repos (id, path, name, display_name)
-               VALUES ($1, $2, $3, $4)
-               ON CONFLICT(path) DO UPDATE SET updated_at = updated_at
-               RETURNING id as "id!: Uuid",
-                         path,
-                         name,
-                         display_name,
-                         setup_script,
-                         cleanup_script,
-                         archive_script,
-                         copy_files,
-                         parallel_setup_script as "parallel_setup_script!: bool",
-                         dev_server_script,
-                         default_target_branch,
-                         default_working_dir,
-                         created_at as "created_at!: DateTime<Utc>",
-                         updated_at as "updated_at!: DateTime<Utc>""#,
-            id,
-            path_str,
-            repo_name,
-            display_name,
+        sqlx::query(
+            r#"INSERT OR IGNORE INTO repos (id, path, name, display_name, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, datetime('now', 'subsec'), datetime('now', 'subsec'))"#,
         )
-        .fetch_one(executor)
-        .await
+        .bind(id)
+        .bind(&path_str)
+        .bind(&repo_name)
+        .bind(display_name)
+        .execute(pool)
+        .await?;
+
+        Self::find_by_path(pool, &path_str).await
+    }
+
+    async fn find_by_path(pool: &SqlitePool, path: &str) -> Result<Self, sqlx::Error> {
+        let row = sqlx::query_as::<_, RepoTuple>(
+            r#"SELECT id, path, name, display_name, setup_script, cleanup_script,
+                      archive_script, copy_files, parallel_setup_script, dev_server_script,
+                      default_target_branch, default_working_dir, created_at, updated_at
+               FROM repos WHERE path = $1"#,
+        )
+        .bind(path)
+        .fetch_one(pool)
+        .await?;
+        Ok(Self::from_tuple(row))
     }
 
     pub async fn delete_orphaned(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
-        let result = sqlx::query!(
+        let result = sqlx::query(
             r#"DELETE FROM repos
                WHERE id NOT IN (SELECT repo_id FROM project_repos)
-                 AND id NOT IN (SELECT repo_id FROM workspace_repos)"#
+                 AND id NOT IN (SELECT repo_id FROM workspace_repos)"#,
         )
         .execute(pool)
         .await?;
@@ -268,85 +258,61 @@ impl Repo {
     }
 
     pub async fn list_all(pool: &SqlitePool) -> Result<Vec<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            Repo,
-            r#"SELECT id as "id!: Uuid",
-                      path,
-                      name,
-                      display_name,
-                      setup_script,
-                      cleanup_script,
-                      archive_script,
-                      copy_files,
-                      parallel_setup_script as "parallel_setup_script!: bool",
-                      dev_server_script,
-                      default_target_branch,
-                      default_working_dir,
-                      created_at as "created_at!: DateTime<Utc>",
-                      updated_at as "updated_at!: DateTime<Utc>"
+        let rows = sqlx::query_as::<_, RepoTuple>(
+            r#"SELECT id, path, name, display_name, setup_script, cleanup_script,
+                      archive_script, copy_files, parallel_setup_script, dev_server_script,
+                      default_target_branch, default_working_dir, created_at, updated_at
                FROM repos
-               ORDER BY display_name ASC"#
+               ORDER BY display_name ASC"#,
         )
         .fetch_all(pool)
-        .await
+        .await?;
+        Ok(rows.into_iter().map(Self::from_tuple).collect())
     }
 
     pub async fn list_by_recent_workspace_usage(
         pool: &SqlitePool,
     ) -> Result<Vec<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            Repo,
-            r#"SELECT r.id as "id!: Uuid",
-                      r.path,
-                      r.name,
-                      r.display_name,
-                      r.setup_script,
-                      r.cleanup_script,
-                      r.archive_script,
-                      r.copy_files,
-                      r.parallel_setup_script as "parallel_setup_script!: bool",
-                      r.dev_server_script,
-                      r.default_target_branch,
-                      r.default_working_dir,
-                      r.created_at as "created_at!: DateTime<Utc>",
-                      r.updated_at as "updated_at!: DateTime<Utc>"
+        let rows = sqlx::query_as::<_, RepoTuple>(
+            r#"SELECT r.id, r.path, r.name, r.display_name, r.setup_script, r.cleanup_script,
+                      r.archive_script, r.copy_files, r.parallel_setup_script, r.dev_server_script,
+                      r.default_target_branch, r.default_working_dir, r.created_at, r.updated_at
                FROM repos r
                LEFT JOIN (
                    SELECT repo_id, MAX(updated_at) AS last_used_at
                    FROM workspace_repos
                    GROUP BY repo_id
                ) wr ON wr.repo_id = r.id
-               ORDER BY wr.last_used_at DESC, r.display_name ASC"#
+               ORDER BY wr.last_used_at DESC, r.display_name ASC"#,
         )
         .fetch_all(pool)
-        .await
+        .await?;
+        Ok(rows.into_iter().map(Self::from_tuple).collect())
     }
 
-    /// Returns the names of active (non-archived) workspaces that reference this repo.
     pub async fn active_workspace_names(
         pool: &SqlitePool,
         repo_id: Uuid,
     ) -> Result<Vec<String>, sqlx::Error> {
-        let rows = sqlx::query_scalar!(
-            r#"SELECT w.name AS "name: String"
+        let rows: Vec<(String,)> = sqlx::query_as(
+            r#"SELECT w.name
                FROM workspaces w
                JOIN workspace_repos wr ON wr.workspace_id = w.id
-               WHERE wr.repo_id = $1
-                 AND w.archived = FALSE"#,
-            repo_id
+               WHERE wr.repo_id = $1 AND w.archived = 0"#,
         )
+        .bind(repo_id)
         .fetch_all(pool)
         .await?;
 
         Ok(rows
             .into_iter()
-            .map(|name| name.unwrap_or_else(|| "Unnamed workspace".to_string()))
+            .map(|(name,)| name)
             .collect())
     }
 
-    /// Delete a repo by ID. Relies on ON DELETE CASCADE for workspace_repos / project_repos.
     pub async fn delete(pool: &SqlitePool, id: Uuid) -> Result<u64, sqlx::Error> {
-        let result = sqlx::query!("DELETE FROM repos WHERE id = $1", id)
+        let result = sqlx::query("DELETE FROM repos WHERE id = $1")
+            .bind(id)
             .execute(pool)
             .await?;
         Ok(result.rows_affected())
@@ -361,9 +327,6 @@ impl Repo {
             .await?
             .ok_or(RepoError::NotFound)?;
 
-        // None = don't update (use existing)
-        // Some(None) = set to NULL
-        // Some(Some(v)) = set to v
         let display_name = match &payload.display_name {
             None => existing.display_name,
             Some(v) => v.clone().unwrap_or_default(),
@@ -401,8 +364,7 @@ impl Repo {
             Some(v) => v.clone(),
         };
 
-        sqlx::query_as!(
-            Repo,
+        sqlx::query(
             r#"UPDATE repos
                SET display_name = $1,
                    setup_script = $2,
@@ -414,34 +376,23 @@ impl Repo {
                    default_target_branch = $8,
                    default_working_dir = $9,
                    updated_at = datetime('now', 'subsec')
-               WHERE id = $10
-               RETURNING id as "id!: Uuid",
-                         path,
-                         name,
-                         display_name,
-                         setup_script,
-                         cleanup_script,
-                         archive_script,
-                         copy_files,
-                         parallel_setup_script as "parallel_setup_script!: bool",
-                         dev_server_script,
-                         default_target_branch,
-                         default_working_dir,
-                         created_at as "created_at!: DateTime<Utc>",
-                         updated_at as "updated_at!: DateTime<Utc>""#,
-            display_name,
-            setup_script,
-            cleanup_script,
-            archive_script,
-            copy_files,
-            parallel_setup_script,
-            dev_server_script,
-            default_target_branch,
-            default_working_dir,
-            id
+               WHERE id = $10"#,
         )
-        .fetch_one(pool)
-        .await
-        .map_err(RepoError::from)
+        .bind(&display_name)
+        .bind(&setup_script)
+        .bind(&cleanup_script)
+        .bind(&archive_script)
+        .bind(&copy_files)
+        .bind(parallel_setup_script)
+        .bind(&dev_server_script)
+        .bind(&default_target_branch)
+        .bind(&default_working_dir)
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+        Self::find_by_id(pool, id)
+            .await?
+            .ok_or(RepoError::NotFound)
     }
 }
