@@ -10,7 +10,7 @@ use db::models::kanban_tag::{CreateKanbanTag, KanbanTag, UpdateKanbanTag};
 use db::models::organization::Organization;
 use db::models::project_status::{CreateProjectStatus, ProjectStatus, UpdateProjectStatus};
 use deployment::Deployment;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use utils::response::ApiResponse;
 
@@ -46,6 +46,17 @@ pub struct GetTagsQuery {
     pub project_id: String,
 }
 
+#[derive(Debug, Deserialize, Serialize, TS)]
+pub struct BulkUpdateIssueItem {
+    pub id: String,
+    pub changes: UpdateIssue,
+}
+
+#[derive(Debug, Deserialize, Serialize, TS)]
+pub struct BulkUpdateIssuesRequest {
+    pub updates: Vec<BulkUpdateIssueItem>,
+}
+
 pub fn router() -> Router<DeploymentImpl> {
     Router::new()
         .route("/local/organizations", get(list_organizations))
@@ -74,6 +85,7 @@ pub fn router() -> Router<DeploymentImpl> {
         .route("/local/issues/{id}", get(get_issue))
         .route("/local/issues/{id}", put(update_issue))
         .route("/local/issues/{id}", delete(delete_issue))
+        .route("/local/issues/bulk", post(bulk_update_issues))
 }
 
 async fn list_organizations(
@@ -296,4 +308,30 @@ async fn delete_issue(
 ) -> Result<ResponseJson<ApiResponse<()>>, ApiError> {
     let _ = Issue::delete(&deployment.db().pool, &id).await?;
     Ok(ResponseJson(ApiResponse::success(())))
+}
+
+async fn bulk_update_issues(
+    State(deployment): State<DeploymentImpl>,
+    body: String,
+) -> Result<ResponseJson<ApiResponse<Vec<Issue>>>, ApiError> {
+    eprintln!("[DEBUG] bulk_update_issues called with raw body: {}", body);
+    
+    let payload: BulkUpdateIssuesRequest = serde_json::from_str(&body).map_err(|e| {
+        eprintln!("[ERROR] Failed to parse bulk update request: {}", e);
+        ApiError::BadRequest(format!("Failed to parse request: {}", e))
+    })?;
+    
+    eprintln!("[DEBUG] Successfully parsed payload");
+    let mut updated_issues = Vec::new();
+    for item in &payload.updates {
+        eprintln!("[DEBUG] Updating issue {}", item.id);
+        match Issue::update(&deployment.db().pool, &item.id, &item.changes).await {
+            Ok(issue) => updated_issues.push(issue),
+            Err(e) => {
+                eprintln!("[ERROR] Failed to update issue {}: {:?}", item.id, e);
+                return Err(ApiError::BadRequest(format!("Failed to update issue {}: {:?}", item.id, e)));
+            }
+        }
+    }
+    Ok(ResponseJson(ApiResponse::success(updated_issues)))
 }

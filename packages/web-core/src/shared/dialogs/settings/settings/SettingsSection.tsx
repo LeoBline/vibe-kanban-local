@@ -5,6 +5,7 @@ import { GeneralSettingsSectionContent } from './GeneralSettingsSection';
 import { ReposSettingsSectionContent } from './ReposSettingsSection';
 import { OrganizationsSettingsSectionContent } from './OrganizationsSettingsSection';
 import { RemoteProjectsSettingsSectionContent } from './RemoteProjectsSettingsSection';
+import { LocalProjectsSettingsSection } from './LocalProjectsSettingsSection';
 import { AgentsSettingsSectionContent } from './AgentsSettingsSection';
 import { McpSettingsSectionContent } from './McpSettingsSection';
 import { RelaySettingsSectionContent } from './RelaySettingsSection';
@@ -14,6 +15,7 @@ export type SettingsSectionType =
   | 'repos'
   | 'organizations'
   | 'remote-projects'
+  | 'local-projects'
   | 'agents'
   | 'mcp'
   | 'relay';
@@ -24,6 +26,9 @@ export type SettingsSectionInitialState = {
   repos: { repoId?: string } | undefined;
   organizations: { organizationId?: string } | undefined;
   'remote-projects':
+    | { organizationId?: string; projectId?: string }
+    | undefined;
+  'local-projects':
     | { organizationId?: string; projectId?: string }
     | undefined;
   agents: { executor?: string; variant?: string } | undefined;
@@ -61,6 +66,14 @@ export function SettingsSection({
           <RemoteProjectsSettingsSectionContent
             initialState={
               initialState as SettingsSectionInitialState['remote-projects']
+            }
+          />
+        );
+      case 'local-projects':
+        return (
+          <LocalProjectsSettingsSection
+            initialState={
+              initialState as SettingsSectionInitialState['local-projects']
             }
           />
         );

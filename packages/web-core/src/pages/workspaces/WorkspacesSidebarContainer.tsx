@@ -28,6 +28,8 @@ import {
   MultiSelectDropdown,
   type MultiSelectDropdownOption,
 } from '@vibe/ui/components/MultiSelectDropdown';
+import { useLocalProjectStore } from '@/shared/stores/useLocalProjectStore';
+import { useLocalOrganizationStore } from '@/shared/stores/useLocalOrganizationStore';
 import { PropertyDropdown } from '@vibe/ui/components/PropertyDropdown';
 import { PrimaryButton } from '@vibe/ui/components/PrimaryButton';
 import { IconButton } from '@vibe/ui/components/IconButton';
@@ -308,6 +310,12 @@ export function WorkspacesSidebarContainer({
     [orgsData?.organizations]
   );
 
+  // Local projects from Zustand store
+  const localProjects = useLocalProjectStore((state) => state.projects);
+  const localOrganizations = useLocalOrganizationStore((state) => state.organizations);
+  console.log('[DEBUG WorkspacesSidebarContainer] localProjects:', localProjects.length, localProjects.map(p => ({ id: p.id, name: p.name })));
+  console.log('[DEBUG WorkspacesSidebarContainer] localOrganizations:', localOrganizations.map(o => ({ id: o.id, name: o.name })));
+
   // Map local workspace ID → remote project ID
   const remoteProjectByLocalId = useMemo(() => {
     const map = new Map<string, string>();
@@ -342,14 +350,35 @@ export function WorkspacesSidebarContainer({
       groupMap.set(project.organization_id, arr);
     }
 
+    const localProjectsForRemoteOrgs = localProjects.filter(p => 
+      organizations.some(org => org.id === p.organization_id)
+    );
+    for (const project of localProjectsForRemoteOrgs) {
+      if (!linkedProjectIds.has(project.id)) {
+        const arr = groupMap.get(project.organization_id) ?? [];
+        arr.push({
+          id: project.id,
+          organization_id: project.organization_id,
+          name: project.name,
+          color: project.color,
+          sort_order: 9999,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        } as Project);
+        groupMap.set(project.organization_id, arr);
+      }
+    }
+
+    console.log('[DEBUG WorkspacesSidebarContainer] projectGroups:', Array.from(groupMap.entries()).map(([orgId, projects]) => ({ orgId, projectCount: projects.length })));
+
     return Array.from(groupMap.entries())
       .map(([orgId, projects]) => ({
         orgId,
-        orgName: orgNameById.get(orgId) ?? 'Unknown',
+        orgName: orgNameById.get(orgId) ?? localOrganizations.find(o => o.id === orgId)?.name ?? 'Local',
         projects: projects.sort((a, b) => a.name.localeCompare(b.name)),
       }))
       .sort((a, b) => a.orgName.localeCompare(b.orgName));
-  }, [allRemoteProjects, remoteProjectByLocalId, orgNameById]);
+  }, [allRemoteProjects, remoteProjectByLocalId, orgNameById, localProjects, organizations, localOrganizations]);
 
   // Build flat project options for MultiSelectDropdown
   const projectOptions = useMemo<MultiSelectDropdownOption<string>[]>(

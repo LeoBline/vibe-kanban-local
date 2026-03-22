@@ -11,6 +11,7 @@ import {
   BroadcastIcon,
   CaretLeftIcon,
   XIcon,
+  FolderIcon,
 } from '@phosphor-icons/react';
 import type { Icon } from '@phosphor-icons/react';
 import { create, useModal } from '@ebay/nice-modal-react';
@@ -36,6 +37,7 @@ const SETTINGS_SECTIONS: {
   { id: 'repos', icon: GitBranchIcon },
   { id: 'organizations', icon: BuildingsIcon },
   { id: 'remote-projects', icon: CloudIcon },
+  { id: 'local-projects', icon: FolderIcon },
   { id: 'agents', icon: CpuIcon },
   { id: 'mcp', icon: PlugIcon },
   { id: 'relay', icon: BroadcastIcon },

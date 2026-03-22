@@ -315,4 +315,27 @@ export const kanbanApi = {
       throw new Error(data.error || 'Failed to delete issue');
     }
   },
+
+  async bulkUpdateIssues(updates: Array<{
+    id: string;
+    changes: {
+      status_id?: string;
+      title?: string;
+      description?: string;
+      priority?: string;
+      sort_order?: number;
+      start_date?: string;
+      target_date?: string;
+    };
+  }>): Promise<LocalIssue[]> {
+    const response = await fetchApi('/api/local/issues/bulk', {
+      method: 'POST',
+      body: JSON.stringify({
+        updates: updates.map((u) => ({ id: u.id, changes: u.changes })),
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Failed to bulk update issues');
+    return data.data;
+  },
 };

@@ -27,6 +27,8 @@
         "organizationsDesc": "Manage organization members and permissions",
         "remote-projects": "Projects",
         "remote-projectsDesc": "Manage projects",
+        "local-projects": "Local Projects",
+        "local-projectsDesc": "Manage local projects",
         "relay": "Remote Access",
         "relayDesc": "Relay tunnel and enrollment"
       }
@@ -580,6 +582,21 @@
         "title": "Sign in required",
         "description": "Sign in to manage your remote projects.",
         "action": "Sign in"
+      }
+    },
+    "localProjects": {
+      "title": "Local Projects",
+      "description": "Manage your local projects stored on this device.",
+      "organization": "Organization",
+      "selectOrg": "-- Select --",
+      "createOrg": "New Org",
+      "projects": "Projects",
+      "createProject": "New Project",
+      "projectNamePlaceholder": "Project name",
+      "noProjects": "No projects yet",
+      "deleteConfirm": {
+        "title": "Delete Project",
+        "description": "Are you sure you want to delete this project? This action cannot be undone."
       }
     }
   },

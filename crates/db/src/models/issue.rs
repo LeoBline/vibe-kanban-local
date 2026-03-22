@@ -78,7 +78,7 @@ pub struct CreateIssue {
     pub extension_metadata: Option<String>,
 }
 
-#[derive(Debug, Deserialize, TS)]
+#[derive(Debug, Deserialize, Serialize, TS)]
 pub struct UpdateIssue {
     pub status_id: Option<String>,
     pub title: Option<String>,

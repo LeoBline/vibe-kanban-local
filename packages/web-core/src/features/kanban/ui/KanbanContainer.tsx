@@ -21,10 +21,18 @@ import {
   useKanbanFilters,
   PRIORITY_ORDER,
 } from '../model/hooks/useKanbanFilters';
-import {
-  bulkUpdateIssues,
-  type BulkUpdateIssueItem,
-} from '@/shared/lib/remoteApi';
+import { kanbanApi } from '@/shared/api/kanbanApi';
+
+interface BulkUpdateIssueItem {
+  id: string;
+  changes: {
+    status_id?: string;
+    sort_order?: number;
+    title?: string;
+    description?: string;
+    priority?: string;
+  };
+}
 import { PlusIcon, DotsThreeIcon } from '@phosphor-icons/react';
 import { Actions } from '@/shared/actions';
 import {
@@ -688,12 +696,15 @@ export function KanbanContainer() {
 
       // Perform bulk update
       isSyncingRef.current = true;
-      bulkUpdateIssues(updates)
+      console.log('[KanbanContainer] Drag ended, bulk updating issues:', updates.length);
+      kanbanApi.bulkUpdateIssues(updates)
+        .then((result) => {
+          console.log('[KanbanContainer] Bulk update successful:', result.length, 'issues updated');
+        })
         .catch((err) => {
-          console.error('Failed to bulk update sort order:', err);
+          console.error('[KanbanContainer] Failed to bulk update sort order:', err);
         })
         .finally(() => {
-          // Delay clearing flag to let Electric sync complete
           setTimeout(() => {
             isSyncingRef.current = false;
           }, 500);

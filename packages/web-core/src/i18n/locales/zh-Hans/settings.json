@@ -27,6 +27,8 @@
         "organizationsDesc": "管理组织成员和权限",
         "remote-projects": "项目",
         "remote-projectsDesc": "管理项目",
+        "local-projects": "本地项目",
+        "local-projectsDesc": "管理本地项目",
         "relay": "Remote Access",
         "relayDesc": "Relay tunnel and enrollment"
       }
@@ -580,6 +582,21 @@
         "title": "Sign in required",
         "description": "Sign in to manage your remote projects.",
         "action": "Sign in"
+      }
+    },
+    "localProjects": {
+      "title": "本地项目",
+      "description": "管理存储在本地设备上的项目",
+      "organization": "组织",
+      "selectOrg": "-- 选择 --",
+      "createOrg": "新建组织",
+      "projects": "项目",
+      "createProject": "新建项目",
+      "projectNamePlaceholder": "项目名称",
+      "noProjects": "暂无项目",
+      "deleteConfirm": {
+        "title": "删除项目",
+        "description": "确定要删除此项目吗？此操作无法撤销。"
       }
     }
   },

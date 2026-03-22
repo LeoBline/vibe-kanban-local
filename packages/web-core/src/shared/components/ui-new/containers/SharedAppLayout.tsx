@@ -49,6 +49,7 @@ import { AppBarNotificationBellContainer } from '@/pages/workspaces/AppBarNotifi
 import { WorkspacesSidebarContainer } from '@/pages/workspaces/WorkspacesSidebarContainer';
 import { WorkspacesSidebarReopenTag } from '@vibe/ui/components/WorkspacesSidebar';
 import { useLocalOrganizationStore } from '@/shared/stores/useLocalOrganizationStore';
+import { useLocalProjectStore } from '@/shared/stores/useLocalProjectStore';
 
 export function SharedAppLayout() {
   const appNavigation = useAppNavigation();
@@ -124,20 +125,47 @@ export function SharedAppLayout() {
     enabled: !!selectedOrgId,
     mutation: PROJECT_MUTATION,
   });
+
+  const localProjects = useLocalProjectStore((state) => state.projects);
+  console.log('[DEBUG SharedAppLayout] localProjects:', localProjects.length, localProjects.map(p => ({ id: p.id, name: p.name, orgId: p.organization_id })));
+
+  const localProjectsForOrg = useMemo(() => {
+    if (!selectedOrgId) return [];
+    return localProjects
+      .filter((p) => p.organization_id === selectedOrgId)
+      .map((p): RemoteProject => ({
+        id: p.id,
+        organization_id: p.organization_id,
+        name: p.name,
+        color: p.color,
+        sort_order: 9999,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+  }, [localProjects, selectedOrgId]);
+
   const sortedProjects = useMemo(
     () => sortProjectsByOrder(orgProjects),
     [orgProjects]
   );
+
+  const allProjects = useMemo(() => {
+    const remoteIds = new Set(orgProjects.map(p => p.id));
+    const localOnly = localProjectsForOrg.filter(p => !remoteIds.has(p.id));
+    console.log('[DEBUG SharedAppLayout] merged projects:', { remote: orgProjects.length, localOnly: localOnly.length, total: orgProjects.length + localOnly.length });
+    return [...orgProjects, ...localOnly];
+  }, [orgProjects, localProjectsForOrg]);
+
   const [orderedProjects, setOrderedProjects] =
-    useState<RemoteProject[]>(sortedProjects);
+    useState<RemoteProject[]>(allProjects);
   const [isSavingProjectOrder, setIsSavingProjectOrder] = useState(false);
 
   useEffect(() => {
     if (isSavingProjectOrder) {
       return;
     }
-    setOrderedProjects(sortedProjects);
-  }, [isSavingProjectOrder, sortedProjects]);
+    setOrderedProjects(allProjects);
+  }, [isSavingProjectOrder, allProjects]);
 
   // Navigate to the first ordered project when org changes
   useEffect(() => {
