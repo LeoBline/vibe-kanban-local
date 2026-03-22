@@ -55,10 +55,7 @@ export function RootRedirectPage() {
           if (existingOrgs.length > 0) {
             localOrgStore.setSelectedOrgId(existingOrgs[0].id);
           } else {
-            const newOrg = localOrgStore.createOrganization(
-              'My Workspace',
-              `workspace-${Date.now()}`
-            );
+            const newOrg = await localOrgStore.createOrganization('My Workspace');
             localOrgStore.setSelectedOrgId(newOrg.id);
           }
           

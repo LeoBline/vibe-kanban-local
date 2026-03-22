@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, type ReactNode } from 'react';
 import { ProjectContext, type ProjectContextValue } from '@/shared/hooks/useProjectContext';
 import type { InsertResult, MutationResult } from '@/shared/lib/electric/types';
 import type {
@@ -35,65 +35,106 @@ export function LocalProjectProvider({ projectId, children }: LocalProjectProvid
   const [allTags, setAllTags] = useState<LocalTag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const currentProjectIdRef = useRef<string | null>(null);
+  const initPromiseRef = useRef<Promise<void> | null>(null);
 
   const loadData = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const [issuesData, statusesData, tagsData] = await Promise.all([
-        kanbanApi.listIssues(projectId),
-        kanbanApi.listStatuses(projectId),
-        kanbanApi.listTags(projectId),
-      ]);
-      setAllIssues(issuesData);
-      setAllStatuses(statusesData);
-      setAllTags(tagsData);
-    } catch (err) {
-      console.error('Failed to load project data:', err);
-      setError(err instanceof Error ? err : new Error('Failed to load project data'));
-    } finally {
-      setIsLoading(false);
+    const thisProjectId = projectId;
+    
+    if (currentProjectIdRef.current !== null && currentProjectIdRef.current !== thisProjectId && initPromiseRef.current) {
+      console.log('[LocalProjectProvider] Project changed, resetting init state:', { oldProject: currentProjectIdRef.current, newProject: thisProjectId });
+      currentProjectIdRef.current = null;
+      initPromiseRef.current = null;
     }
+    
+    if (initPromiseRef.current) {
+      console.log('[LocalProjectProvider] Already initializing for project:', thisProjectId, ', waiting...');
+      return initPromiseRef.current;
+    }
+
+    currentProjectIdRef.current = thisProjectId;
+    const initPromise = (async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        console.log('[LocalProjectProvider] loadData called for project:', projectId);
+        
+        let existingStatuses = await kanbanApi.listStatuses(projectId);
+        console.log('[LocalProjectProvider] Existing statuses count:', existingStatuses.length, existingStatuses.map(s => ({ id: s.id, name: s.name, projectId: s.project_id })));
+        
+        if (existingStatuses.length === 0) {
+          console.log('[LocalProjectProvider] Creating default statuses for project:', projectId);
+          const defaultStatuses = [
+            { name: 'Backlog', color: '220 9% 46%', sort_order: 0, hidden: true },
+            { name: 'To do', color: '217 91% 60%', sort_order: 1, hidden: false },
+            { name: 'In progress', color: '38 92% 50%', sort_order: 2, hidden: false },
+            { name: 'In review', color: '258 90% 66%', sort_order: 3, hidden: false },
+            { name: 'Done', color: '142 71% 45%', sort_order: 4, hidden: false },
+            { name: 'Cancelled', color: '0 84% 60%', sort_order: 5, hidden: true },
+          ];
+
+          const createdStatuses: LocalProjectStatus[] = [];
+          for (const status of defaultStatuses) {
+            try {
+              console.log('[LocalProjectProvider] Creating status:', status.name, 'hidden:', status.hidden);
+              const created = await kanbanApi.createStatus(projectId, status.name, status.color, status.sort_order, status.hidden);
+              console.log('[LocalProjectProvider] Created status:', created.name, 'hidden:', created.hidden);
+              createdStatuses.push(created);
+            } catch (err) {
+              console.error('[LocalProjectProvider] Failed to create default status:', status.name, err);
+            }
+          }
+          console.log('[LocalProjectProvider] Created statuses count:', createdStatuses.length);
+          if (createdStatuses.length > 0) {
+            existingStatuses = createdStatuses;
+          }
+        }
+
+        const [issuesData, tagsData] = await Promise.all([
+          kanbanApi.listIssues(projectId),
+          kanbanApi.listTags(projectId),
+        ]);
+
+        setAllIssues(issuesData);
+        setAllTags(tagsData);
+        
+        console.log('[LocalProjectProvider] Checking project ID before setting statuses:', { currentProjectId: projectId, loadedForProjectId: existingStatuses[0]?.project_id });
+        
+        const relevantStatuses = existingStatuses.filter(s => s.project_id === projectId);
+        console.log('[LocalProjectProvider] Relevant statuses for current project:', relevantStatuses.length);
+        setAllStatuses(relevantStatuses);
+      } catch (err) {
+        console.error('Failed to load project data:', err);
+        setError(err instanceof Error ? err : new Error('Failed to load project data'));
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+    
+    initPromiseRef.current = initPromise;
+    return initPromise;
   }, [projectId]);
 
   useEffect(() => {
-    loadData();
+    const abortController = new AbortController();
+    loadData().then(() => {
+      if (abortController.signal.aborted) {
+        console.log('[LocalProjectProvider] Aborted stale initialization');
+      } else {
+        console.log('[LocalProjectProvider] Initialization complete for project:', currentProjectIdRef.current);
+      }
+    });
+    return () => {
+      abortController.abort();
+    };
   }, [loadData]);
 
   const issues = useMemo(() => allIssues.filter(i => i.project_id === projectId), [allIssues, projectId]);
   const statuses = useMemo(() => allStatuses.filter(s => s.project_id === projectId), [allStatuses, projectId]);
   const tags = useMemo(() => allTags.filter(t => t.project_id === projectId), [allTags, projectId]);
 
-  useEffect(() => {
-    const initializeDefaultStatuses = async () => {
-      const existingStatuses = await kanbanApi.listStatuses(projectId);
-      if (existingStatuses.length === 0) {
-        const defaultStatuses = [
-          { name: 'Backlog', color: '220 9% 46%', sort_order: 0, hidden: true },
-          { name: 'To do', color: '217 91% 60%', sort_order: 1, hidden: false },
-          { name: 'In progress', color: '38 92% 50%', sort_order: 2, hidden: false },
-          { name: 'In review', color: '258 90% 66%', sort_order: 3, hidden: false },
-          { name: 'Done', color: '142 71% 45%', sort_order: 4, hidden: false },
-          { name: 'Cancelled', color: '0 84% 60%', sort_order: 5, hidden: true },
-        ];
-
-        const createdStatuses: LocalProjectStatus[] = [];
-        for (const status of defaultStatuses) {
-          try {
-            const created = await kanbanApi.createStatus(projectId, status.name, status.color, status.sort_order, status.hidden);
-            createdStatuses.push(created);
-          } catch (err) {
-            console.error('Failed to create default status:', err);
-          }
-        }
-        if (createdStatuses.length > 0) {
-          setAllStatuses(createdStatuses);
-        }
-      }
-    };
-
-    initializeDefaultStatuses();
-  }, [projectId]);
+  console.log('[LocalProjectProvider] Context statuses for project', projectId, ':', statuses.length, statuses.map(s => ({ id: s.id, name: s.name, hidden: s.hidden })));
 
   const issuesById = useMemo(() => {
     const map = new Map<string, Issue>();
@@ -132,7 +173,7 @@ export function LocalProjectProvider({ projectId, children }: LocalProjectProvid
         name: status.name,
         color: status.color,
         sort_order: status.sort_order,
-        hidden: Boolean(status.hidden),
+        hidden: !!status.hidden,
         created_at: status.created_at,
       };
       map.set(status.id, adaptedStatus);
@@ -290,7 +331,7 @@ export function LocalProjectProvider({ projectId, children }: LocalProjectProvid
           name: newStatus.name,
           color: newStatus.color,
           sort_order: newStatus.sort_order,
-          hidden: Boolean(newStatus.hidden),
+          hidden: !!newStatus.hidden,
           created_at: newStatus.created_at,
         };
         setAllStatuses(prev => prev.map(s => s.id === tempId ? adaptedStatus as unknown as LocalProjectStatus : s));

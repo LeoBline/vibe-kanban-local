@@ -1,81 +1,65 @@
 import { create } from 'zustand';
-import type { Organization } from 'shared/types';
-
-const STORAGE_KEY = 'vk-local-organizations';
-
-interface LocalOrganization extends Organization {
-  isLocal: true;
-}
+import { kanbanApi, type LocalOrganization } from '@/shared/api/kanbanApi';
 
 interface LocalOrganizationsState {
   organizations: LocalOrganization[];
   selectedOrgId: string | null;
+  isLoading: boolean;
+  error: string | null;
 }
 
-const loadFromStorage = (): LocalOrganizationsState => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored) as LocalOrganizationsState;
-      return {
-        organizations: parsed.organizations || [],
-        selectedOrgId: parsed.selectedOrgId || null,
-      };
-    }
-  } catch {
-    // localStorage may be unavailable or corrupted
-  }
-  return { organizations: [], selectedOrgId: null };
-};
-
-const saveToStorage = (state: LocalOrganizationsState): void => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // localStorage may be unavailable
-  }
-};
-
 export const useLocalOrganizationStore = create<LocalOrganizationsState & {
-  createOrganization: (name: string, slug: string) => Organization;
+  fetchOrganizations: () => Promise<void>;
+  createOrganization: (name: string) => Promise<LocalOrganization>;
   setSelectedOrgId: (orgId: string | null) => void;
-  getSelectedOrganization: () => Organization | null;
+  getSelectedOrganization: () => LocalOrganization | null;
   clearAll: () => void;
 }>((set, get) => ({
-  ...loadFromStorage(),
+  organizations: [],
+  selectedOrgId: null,
+  isLoading: false,
+  error: null,
 
-  createOrganization: (name: string, slug: string) => {
-    const now = new Date().toISOString();
-    const newOrg: LocalOrganization = {
-      id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-      name,
-      slug,
-      is_personal: true,
-      issue_prefix: 'LOCAL',
-      created_at: now,
-      updated_at: now,
-      isLocal: true,
-    };
+  fetchOrganizations: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const organizations = await kanbanApi.listOrganizations();
+      set({ 
+        organizations: organizations,
+        isLoading: false 
+      });
+    } catch (err) {
+      console.error('[useLocalOrganizationStore] Failed to fetch organizations:', err);
+      set({ 
+        error: err instanceof Error ? err.message : 'Failed to fetch organizations',
+        isLoading: false 
+      });
+    }
+  },
 
-    set((state) => {
-      const newState = {
-        ...state,
+  createOrganization: async (name: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const newOrg = await kanbanApi.createOrganization(name);
+      set((state) => ({
         organizations: [...state.organizations, newOrg],
         selectedOrgId: newOrg.id,
-      };
-      saveToStorage(newState);
-      return newState;
-    });
-
-    return newOrg;
+        isLoading: false,
+      }));
+      return newOrg;
+    } catch (err) {
+      console.error('[useLocalOrganizationStore] Failed to create organization:', err);
+      set({ 
+        error: err instanceof Error ? err.message : 'Failed to create organization',
+        isLoading: false 
+      });
+      throw err;
+    }
   },
 
   setSelectedOrgId: (orgId: string | null) => {
-    set((state) => {
-      const newState = { ...state, selectedOrgId: orgId };
-      saveToStorage(newState);
-      return newState;
-    });
+    localStorage.setItem('vk-local-selected-org', orgId || '');
+    set({ selectedOrgId: orgId });
   },
 
   getSelectedOrganization: () => {
@@ -84,8 +68,12 @@ export const useLocalOrganizationStore = create<LocalOrganizationsState & {
   },
 
   clearAll: () => {
-    const newState = { organizations: [], selectedOrgId: null };
-    saveToStorage(newState);
-    set(newState);
+    set({ organizations: [], selectedOrgId: null });
+    localStorage.removeItem('vk-local-selected-org');
   },
 }));
+
+const storedOrgId = localStorage.getItem('vk-local-selected-org');
+if (storedOrgId) {
+  useLocalOrganizationStore.getState().setSelectedOrgId(storedOrgId);
+}

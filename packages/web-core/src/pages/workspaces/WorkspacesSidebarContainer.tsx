@@ -313,6 +313,24 @@ export function WorkspacesSidebarContainer({
   // Local projects from Zustand store
   const localProjects = useLocalProjectStore((state) => state.projects);
   const localOrganizations = useLocalOrganizationStore((state) => state.organizations);
+  const fetchOrganizations = useLocalOrganizationStore((state) => state.fetchOrganizations);
+  const selectedOrgId = useLocalOrganizationStore((state) => state.selectedOrgId);
+  const fetchProjects = useLocalProjectStore((state) => state.fetchProjects);
+
+  // Load organizations on mount
+  useEffect(() => {
+    console.log('[DEBUG WorkspacesSidebarContainer] Loading organizations...');
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  // Load projects when organization changes
+  useEffect(() => {
+    if (selectedOrgId) {
+      console.log('[DEBUG WorkspacesSidebarContainer] Loading projects for org:', selectedOrgId);
+      fetchProjects(selectedOrgId);
+    }
+  }, [selectedOrgId, fetchProjects]);
+
   console.log('[DEBUG WorkspacesSidebarContainer] localProjects:', localProjects.length, localProjects.map(p => ({ id: p.id, name: p.name })));
   console.log('[DEBUG WorkspacesSidebarContainer] localOrganizations:', localOrganizations.map(o => ({ id: o.id, name: o.name })));
 

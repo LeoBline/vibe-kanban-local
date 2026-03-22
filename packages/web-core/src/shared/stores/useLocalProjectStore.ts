@@ -1,86 +1,62 @@
 import { create } from 'zustand';
 import type { Project } from 'shared/remote-types';
-
-const STORAGE_KEY = 'vk-local-projects';
-
-interface LocalProject extends Project {
-  isLocal: true;
-}
+import { kanbanApi, type LocalProject } from '@/shared/api/kanbanApi';
 
 interface LocalProjectsState {
   projects: LocalProject[];
+  isLoading: boolean;
+  error: string | null;
 }
 
-const loadFromStorage = (): LocalProjectsState => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored) as LocalProjectsState;
-      return {
-        projects: parsed.projects || [],
-      };
-    }
-  } catch {
-    // localStorage may be unavailable or corrupted
-  }
-  return { projects: [] };
-};
-
-const saveToStorage = (state: LocalProjectsState): void => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // localStorage may be unavailable
-  }
-};
-
 export const useLocalProjectStore = create<LocalProjectsState & {
-  createProject: (organizationId: string, name: string, color: string) => Project;
+  fetchProjects: (organizationId: string) => Promise<void>;
+  createProject: (organizationId: string, name: string, color: string) => Promise<LocalProject>;
   getProjectsByOrganization: (organizationId: string) => Project[];
-  updateProject: (projectId: string, updates: Partial<Pick<Project, 'name' | 'color' | 'sort_order'>>) => void;
-  deleteProject: (projectId: string) => void;
+  updateProject: (projectId: string, updates: Partial<Pick<Project, 'name' | 'color' | 'sort_order'>>) => Promise<void>;
+  deleteProject: (projectId: string) => Promise<void>;
   clearAll: () => void;
 }>((set, get) => ({
-  ...loadFromStorage(),
+  projects: [],
+  isLoading: false,
+  error: null,
 
-  createProject: (organizationId: string, name: string, color: string) => {
-    const now = new Date().toISOString();
-    const state = get();
-    const existingProjects = state.projects.filter(p => p.organization_id === organizationId);
-    const maxSortOrder = existingProjects.length > 0 
-      ? Math.max(...existingProjects.map(p => p.sort_order)) 
-      : -1;
-
-    const newProject: LocalProject = {
-      id: `local-project-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-      organization_id: organizationId,
-      name,
-      color,
-      sort_order: maxSortOrder + 1,
-      created_at: now,
-      updated_at: now,
-      isLocal: true,
-    };
-
-    console.log('[DEBUG createProject] Before set', { 
-      currentProjectsCount: state.projects.length,
-      newProject 
-    });
-
-    set((state) => {
-      const newState = {
-        ...state,
-        projects: [...state.projects, newProject],
-      };
-      console.log('[DEBUG createProject] After set', { 
-        newProjectsCount: newState.projects.length,
-        projectIds: newState.projects.map(p => p.id)
+  fetchProjects: async (organizationId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      console.log('[useLocalProjectStore] fetchProjects called for org:', organizationId);
+      const projects = await kanbanApi.listProjects(organizationId);
+      console.log('[useLocalProjectStore] Received projects from API:', projects.length, projects.map(p => ({ id: p.id, name: p.name })));
+      set({ 
+        projects: projects,
+        isLoading: false 
       });
-      saveToStorage(newState);
-      return newState;
-    });
+      console.log('[useLocalProjectStore] Store updated with projects:', projects.length);
+    } catch (err) {
+      console.error('[useLocalProjectStore] Failed to fetch projects:', err);
+      set({ 
+        error: err instanceof Error ? err.message : 'Failed to fetch projects',
+        isLoading: false 
+      });
+    }
+  },
 
-    return newProject;
+  createProject: async (organizationId: string, name: string, color: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const newProject = await kanbanApi.createProject(organizationId, name, color);
+      set((state) => ({
+        projects: [...state.projects, newProject],
+        isLoading: false,
+      }));
+      return newProject;
+    } catch (err) {
+      console.error('[useLocalProjectStore] Failed to create project:', err);
+      set({ 
+        error: err instanceof Error ? err.message : 'Failed to create project',
+        isLoading: false 
+      });
+      throw err;
+    }
   },
 
   getProjectsByOrganization: (organizationId: string) => {
@@ -90,35 +66,45 @@ export const useLocalProjectStore = create<LocalProjectsState & {
       .sort((a, b) => a.sort_order - b.sort_order);
   },
 
-  updateProject: (projectId: string, updates: Partial<Pick<Project, 'name' | 'color' | 'sort_order'>>) => {
-    set((state) => {
-      const newState = {
-        ...state,
+  updateProject: async (projectId: string, updates: Partial<Pick<Project, 'name' | 'color' | 'sort_order'>>) => {
+    set({ isLoading: true, error: null });
+    try {
+      const updatedProject = await kanbanApi.updateProject(projectId, updates);
+      set((state) => ({
         projects: state.projects.map((p) =>
-          p.id === projectId
-            ? { ...p, ...updates, updated_at: new Date().toISOString() }
-            : p
+          p.id === projectId ? updatedProject : p
         ),
-      };
-      saveToStorage(newState);
-      return newState;
-    });
+        isLoading: false,
+      }));
+    } catch (err) {
+      console.error('[useLocalProjectStore] Failed to update project:', err);
+      set({ 
+        error: err instanceof Error ? err.message : 'Failed to update project',
+        isLoading: false 
+      });
+      throw err;
+    }
   },
 
-  deleteProject: (projectId: string) => {
-    set((state) => {
-      const newState = {
-        ...state,
+  deleteProject: async (projectId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      await kanbanApi.deleteProject(projectId);
+      set((state) => ({
         projects: state.projects.filter((p) => p.id !== projectId),
-      };
-      saveToStorage(newState);
-      return newState;
-    });
+        isLoading: false,
+      }));
+    } catch (err) {
+      console.error('[useLocalProjectStore] Failed to delete project:', err);
+      set({ 
+        error: err instanceof Error ? err.message : 'Failed to delete project',
+        isLoading: false 
+      });
+      throw err;
+    }
   },
 
   clearAll: () => {
-    const newState = { projects: [] };
-    saveToStorage(newState);
-    set(newState);
+    set({ projects: [], isLoading: false, error: null });
   },
 }));

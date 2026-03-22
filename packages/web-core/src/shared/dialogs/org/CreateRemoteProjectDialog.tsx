@@ -23,7 +23,6 @@ import {
 import { getRandomPresetColor, PRESET_COLORS } from '@/shared/lib/colors';
 import { ColorPicker } from '@/shared/components/ui-new/containers/ColorPickerContainer';
 import { useLocalProjectStore } from '@/shared/stores/useLocalProjectStore';
-import { kanbanApi } from '@/shared/api/kanbanApi';
 
 export type CreateRemoteProjectDialogProps = {
   organizationId: string;
@@ -98,23 +97,12 @@ const CreateRemoteProjectDialogImpl = create<CreateRemoteProjectDialogProps>(
 
         if (isLocalMode) {
           console.log('[DEBUG CreateRemoteProjectDialog] Creating local project', { organizationId, name, color });
-          project = localProjectStore.createProject(
+          project = await localProjectStore.createProject(
             organizationId,
             name.trim(),
             color
           );
           console.log('[DEBUG CreateRemoteProjectDialog] Created project in store:', project);
-          try {
-            const dbProject = await kanbanApi.createProject(
-              organizationId,
-              name.trim(),
-              color,
-              project.id
-            );
-            console.log('[DEBUG CreateRemoteProjectDialog] Created project in DB:', dbProject);
-          } catch (dbErr) {
-            console.error('[DEBUG CreateRemoteProjectDialog] Failed to save to DB:', dbErr);
-          }
         } else {
           const result = insert({
             organization_id: organizationId,

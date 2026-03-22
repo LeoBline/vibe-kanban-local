@@ -286,7 +286,7 @@ export function SharedAppLayout() {
 
     if (!orgId) {
       console.log('[DEBUG] No org selected, creating local org');
-      const newOrg = localOrgStore.createOrganization('My Workspace', `workspace-${Date.now()}`);
+      const newOrg = await localOrgStore.createOrganization('My Workspace');
       orgId = newOrg.id;
       console.log('[DEBUG] Created org:', orgId);
     }
@@ -294,12 +294,11 @@ export function SharedAppLayout() {
     try {
       console.log('[DEBUG] Opening CreateRemoteProjectDialog with orgId:', orgId);
       const result: CreateRemoteProjectResult =
-        await CreateRemoteProjectDialog.show({ organizationId: orgId, isLocalMode: true });
+        await CreateRemoteProjectDialog.show({ organizationId: orgId!, isLocalMode: true });
       console.log('[DEBUG] Dialog result:', result);
 
       if (result.action === 'created' && result.project) {
         console.log('[DEBUG] Created project:', result.project);
-        // Update both organization stores to ensure consistency
         const projectOrgId = result.project.organization_id;
         setSelectedOrgId(projectOrgId);
         localOrgStore.setSelectedOrgId(projectOrgId);

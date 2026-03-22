@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   PlusIcon,
@@ -39,6 +39,7 @@ export function LocalProjectsSettingsSection({
   const { t } = useTranslation('settings');
 
   const localOrganizations = useLocalOrganizationStore((state) => state.organizations);
+  const fetchOrganizations = useLocalOrganizationStore((state) => state.fetchOrganizations);
   const createOrganization = useLocalOrganizationStore((state) => state.createOrganization);
   const setSelectedOrgId = useLocalOrganizationStore((state) => state.setSelectedOrgId);
 
@@ -46,6 +47,12 @@ export function LocalProjectsSettingsSection({
   const createProject = useLocalProjectStore((state) => state.createProject);
   const updateProject = useLocalProjectStore((state) => state.updateProject);
   const deleteProject = useLocalProjectStore((state) => state.deleteProject);
+  const fetchProjects = useLocalProjectStore((state) => state.fetchProjects);
+
+  useEffect(() => {
+    console.log('[LocalProjectsSettingsSection] Loading organizations...');
+    fetchOrganizations();
+  }, [fetchOrganizations]);
 
   const [selectedOrgId, setSelectedOrgIdLocal] = useState<string | null>(
     initialState?.organizationId ?? localOrganizations[0]?.id ?? null
@@ -75,14 +82,14 @@ export function LocalProjectsSettingsSection({
     setEditingProjectId(null);
   }, [setSelectedOrgId]);
 
-  const handleCreateOrganization = useCallback(() => {
+  const handleCreateOrganization = useCallback(async () => {
     const name = `Workspace ${localOrganizations.length + 1}`;
-    const newOrg = createOrganization(name, `workspace-${Date.now()}`);
+    const newOrg = await createOrganization(name);
     setSelectedOrgIdLocal(newOrg.id);
     setSelectedOrgId(newOrg.id);
   }, [localOrganizations.length, createOrganization, setSelectedOrgId]);
 
-  const handleCreateProject = useCallback(() => {
+  const handleCreateProject = useCallback(async () => {
     if (!selectedOrgId) {
       setError('Please select or create an organization first');
       return;
@@ -94,13 +101,14 @@ export function LocalProjectsSettingsSection({
       return;
     }
 
-    const newProject = createProject(selectedOrgId, trimmedName, newProjectColor);
+    const newProject = await createProject(selectedOrgId, trimmedName, newProjectColor);
+    await fetchProjects(selectedOrgId);
     setSelectedProjectId(newProject.id);
     setIsCreating(false);
     setNewProjectName('');
     setNewProjectColor(getRandomPresetColor());
     setError(null);
-  }, [selectedOrgId, newProjectName, newProjectColor, createProject]);
+  }, [selectedOrgId, newProjectName, newProjectColor, createProject, fetchProjects]);
 
   const handleStartEditing = useCallback((project: LocalProjectItem) => {
     setEditingProjectId(project.id);
