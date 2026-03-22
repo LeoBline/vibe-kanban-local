@@ -252,15 +252,14 @@ export function SharedAppLayout() {
 
   const handleCreateProject = useCallback(async () => {
     console.log('[DEBUG] handleCreateProject called', { isSignedIn, selectedOrgId });
-    let orgId = selectedOrgId;
 
     const localOrgStore = useLocalOrganizationStore.getState();
+    let orgId = localOrgStore.selectedOrgId;
 
     if (!orgId) {
       console.log('[DEBUG] No org selected, creating local org');
       const newOrg = localOrgStore.createOrganization('My Workspace', `workspace-${Date.now()}`);
       orgId = newOrg.id;
-      setSelectedOrgId(orgId);
       console.log('[DEBUG] Created org:', orgId);
     }
 
@@ -271,12 +270,17 @@ export function SharedAppLayout() {
       console.log('[DEBUG] Dialog result:', result);
 
       if (result.action === 'created' && result.project) {
+        console.log('[DEBUG] Created project:', result.project);
+        // Update both organization stores to ensure consistency
+        const projectOrgId = result.project.organization_id;
+        setSelectedOrgId(projectOrgId);
+        localOrgStore.setSelectedOrgId(projectOrgId);
         appNavigation.goToProject(result.project.id);
       }
     } catch (err) {
       console.error('[DEBUG] Dialog error:', err);
     }
-  }, [selectedOrgId, setSelectedOrgId, appNavigation]);
+  }, [appNavigation, setSelectedOrgId]);
 
   const handleSignIn = useCallback(async () => {
     try {

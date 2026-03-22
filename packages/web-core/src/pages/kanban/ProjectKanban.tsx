@@ -212,11 +212,20 @@ function useFindProjectById(projectId: string | undefined) {
   const { data: projects = [], isLoading: projectsLoading } =
     useOrganizationProjects(selectedOrgId);
 
-  console.log('[DEBUG useFindProjectById]', { projectId, selectedOrgId, projectsCount: projects.length, projects });
+  console.log('[DEBUG useFindProjectById]', { 
+    projectId, 
+    selectedOrgId, 
+    projectsCount: projects.length, 
+    projectIds: projects.map(p => p.id),
+    targetProjectId: 'local-project-1774185310594-hwdgjvn',
+    targetFound: projects.some(p => p.id === 'local-project-1774185310594-hwdgjvn')
+  });
 
   const project = useMemo(() => {
     if (!projectId) return undefined;
-    return projects.find((p) => p.id === projectId);
+    const found = projects.find((p) => p.id === projectId);
+    console.log('[DEBUG useFindProjectById] find result', { projectId, found });
+    return found;
   }, [projectId, projects]);
 
   return {

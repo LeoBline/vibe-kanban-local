@@ -19,6 +19,8 @@ pub struct CreateKanbanProject {
     pub organization_id: String,
     pub name: String,
     pub color: String,
+    #[serde(default)]
+    pub id: Option<String>,
 }
 
 #[derive(Debug, Deserialize, TS)]
@@ -63,7 +65,7 @@ impl KanbanProject {
     }
 
     pub async fn create(pool: &SqlitePool, data: &CreateKanbanProject) -> Result<Self, sqlx::Error> {
-        let id = format!("local-project-{}", chrono::Utc::now().timestamp_millis());
+        let id = data.id.clone().unwrap_or_else(|| format!("local-project-{}", chrono::Utc::now().timestamp_millis()));
         
         let max_sort_order: Option<(i64,)> = sqlx::query_as(
             "SELECT COALESCE(MAX(sort_order), -1) FROM kanban_projects WHERE organization_id = ?"

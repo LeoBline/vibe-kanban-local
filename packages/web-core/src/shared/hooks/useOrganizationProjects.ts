@@ -32,6 +32,7 @@ export function useOrganizationProjects(organizationId: string | null) {
     console.log('[DEBUG useOrganizationProjects] comparing', { 
       searchOrgId: organizationId, 
       searchOrgIdType: typeof organizationId,
+      targetProjectId: 'local-project-1774184911523-q608kry',
       allProjectsOrgIds: allLocalProjects.map(p => ({ id: p.id, orgId: p.organization_id, orgIdType: typeof p.organization_id })),
     });
     const filtered = allLocalProjects
@@ -41,7 +42,8 @@ export function useOrganizationProjects(organizationId: string | null) {
       organizationId, 
       allProjectsCount: allLocalProjects.length,
       filteredCount: filtered.length,
-      projectIds: filtered.map(p => p.id)
+      projectIds: filtered.map(p => p.id),
+      targetFound: filtered.some(p => p.id === 'local-project-1774184911523-q608kry')
     });
     return filtered;
   }, [organizationId, isLocalOrg, allLocalProjects]);

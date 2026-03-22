@@ -111,10 +111,10 @@ export const kanbanApi = {
     return data.data;
   },
 
-  async createProject(organizationId: string, name: string, color: string): Promise<LocalProject> {
+  async createProject(organizationId: string, name: string, color: string, id?: string): Promise<LocalProject> {
     const response = await fetchApi('/api/local/projects', {
       method: 'POST',
-      body: JSON.stringify({ organization_id: organizationId, name, color }),
+      body: JSON.stringify({ organization_id: organizationId, name, color, id }),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Failed to create project');
