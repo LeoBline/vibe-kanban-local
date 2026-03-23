@@ -1,0 +1,27 @@
+services:
+  vibe-kanban:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Optional: Add PostHog for analytics (leave empty to disable)
+        POSTHOG_API_KEY: ${POSTHOG_API_KEY:-}
+        POSTHOG_API_ENDPOINT: ${POSTHOG_API_ENDPOINT:-}
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      RUST_LOG: info
+      HOST: 0.0.0.0
+      PORT: 3000
+    volumes:
+      - vibe-data:/root/.local/share/ai.bloop.vibe-kanban
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  vibe-data:
