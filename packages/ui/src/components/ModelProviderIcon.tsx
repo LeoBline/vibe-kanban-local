@@ -1,6 +1,4 @@
 import {
-  GoogleLogoIcon,
-  HardDriveIcon,
   SparkleIcon,
 } from '@phosphor-icons/react';
 import { cn } from '../lib/cn';
@@ -26,29 +24,6 @@ export function ModelProviderIcon({
         className={className}
       />
     );
-  }
-
-  if (id.includes('openai') || id.includes('gpt')) {
-    return (
-      <img
-        src={`/agents/codex${suffix}.svg`}
-        alt="OpenAI"
-        className={className}
-      />
-    );
-  }
-
-  if (id.includes('google') || id.includes('gemini')) {
-    return <GoogleLogoIcon className={className} />;
-  }
-
-  if (
-    id.includes('local') ||
-    id.includes('ollama') ||
-    id.includes('llama') ||
-    id.includes('server')
-  ) {
-    return <HardDriveIcon className={className} />;
   }
 
   return <SparkleIcon className={className} />;

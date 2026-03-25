@@ -37,25 +37,6 @@ Agents request permission before performing potentially destructive actions like
 <Accordion title="Claude Code Router">
 Distributes requests across multiple Claude Code instances running in parallel. Useful when working on several tasks simultaneously or when you want to reduce wait times by load-balancing across instances.
 </Accordion>
-
-<Accordion title="Sandbox Modes (Codex)">
-Controls what the agent can access:
-- **read-only** - Can read files but not modify anything
-- **workspace-write** - Can modify files within the project directory
-- **danger-full-access** - Unrestricted file system access
-</Accordion>
-
-<Accordion title="Approval Levels">
-Determines when the agent pauses for your confirmation:
-- **untrusted** - Asks before every action
-- **on-failure** - Only asks when something goes wrong
-- **on-request** - Only asks when explicitly requested
-- **never** - Fully autonomous (no confirmations)
-</Accordion>
-
-<Accordion title="Reasoning Effort">
-Controls how much computational effort the model spends "thinking" before responding. Higher reasoning produces more thorough analysis but takes longer and uses more tokens. Lower reasoning is faster but may miss nuances in complex problems.
-</Accordion>
 </AccordionGroup>
 
 ## Configuration Access
@@ -131,94 +112,6 @@ Click the **Default** badge next to a configuration to make it the default for t
   </ParamField>
 
   [View full CLI reference →](https://docs.anthropic.com/en/docs/claude-code/cli-reference#cli-flags)
-</Tab>
-
-<Tab title="GEMINI">
-  <ParamField path="model" type="string">
-  Choose model variant: `"default"` or `"flash"`
-  </ParamField>
-
-  <ParamField path="yolo" type="boolean">
-  Run without confirmations
-  </ParamField>
-
-  [View full CLI reference →](https://google-gemini.github.io/gemini-cli/)
-</Tab>
-
-<Tab title="AMP">
-  <ParamField path="dangerously_allow_all" type="boolean">
-  Allow all actions without restrictions (unsafe)
-  </ParamField>
-
-  [View full documentation →](https://ampcode.com/manual#cli)
-</Tab>
-
-<Tab title="CODEX">
-  <ParamField path="sandbox" type="string">
-  Execution environment: `"read-only"`, `"workspace-write"`, or `"danger-full-access"`
-  </ParamField>
-
-  <ParamField path="approval" type="string">
-  Approval level: `"untrusted"`, `"on-failure"`, `"on-request"`, or `"never"`
-  </ParamField>
-
-  <ParamField path="model_reasoning_effort" type="string">
-  Reasoning depth: `"low"`, `"medium"`, or `"high"`
-  </ParamField>
-
-  <ParamField path="model_reasoning_summary" type="string">
-  Summary style: `"auto"`, `"concise"`, `"detailed"`, or `"none"`
-  </ParamField>
-
-  [View full documentation →](https://github.com/openai/codex)
-</Tab>
-
-<Tab title="CURSOR">
-  <ParamField path="force" type="boolean">
-  Force execution without confirmation
-  </ParamField>
-
-  <ParamField path="model" type="string">
-  Specify model to use
-  </ParamField>
-
-  [View full CLI reference →](https://docs.cursor.com/en/cli/reference/parameters)
-</Tab>
-
-<Tab title="OPENCODE">
-  <ParamField path="model" type="string">
-  Specify model to use
-  </ParamField>
-
-  <ParamField path="agent" type="string">
-  Choose agent type
-  </ParamField>
-
-  [View full documentation →](https://opencode.ai/docs/cli/#flags-1)
-</Tab>
-
-<Tab title="QWEN_CODE">
-  <ParamField path="yolo" type="boolean">
-  Run without confirmations
-  </ParamField>
-
-  [View full documentation →](https://qwenlm.github.io/qwen-code-docs/en/cli/index)
-</Tab>
-
-<Tab title="DROID">
-  <ParamField path="autonomy" type="string">
-  Permission level: `"normal"`, `"low"`, `"medium"`, `"high"`, or `"skip-permissions-unsafe"`
-  </ParamField>
-
-  <ParamField path="model" type="string">
-  Specify which model to use
-  </ParamField>
-
-  <ParamField path="reasoning_effort" type="string">
-  Reasoning depth: `"off"`, `"low"`, `"medium"`, or `"high"`
-  </ParamField>
-
-  [View full documentation →](https://docs.factory.ai/factory-cli/getting-started/overview)
 </Tab>
 </Tabs>
 

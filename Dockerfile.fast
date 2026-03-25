@@ -1,0 +1,77 @@
+# Fast Build Dockerfile - 优化版
+# 使用 sccache 缓存 Rust 编译结果
+# 减少前端语言支持以加快构建
+
+# Build stage
+FROM node:24-alpine AS builder
+
+RUN apk add --no-cache \
+    curl \
+    build-base \
+    perl \
+    llvm-dev \
+    clang-dev
+
+ENV RUSTFLAGS="-C target-feature=-crt-static"
+ENV CARGO_INCREMENTAL=0
+ENV SCCACHE_GHA_ENABLED=true
+ENV SCCACHE_DIR=/sccache
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal && \
+    . "$HOME/.cargo/env" && \
+    rustup target add x86_64-unknown-linux-musl
+
+RUN curl -L https://github.com/mozilla/sccache/releases/download/v0.8.1/sccache-v0.8.1-x86_64-unknown-linux-musl.tar.gz | tar xz && \
+    mv sccache-v0.8.1-x86_64-unknown-linux-musl/sccache /usr/local/bin/ && \
+    chmod +x /usr/local/bin/sccache
+
+ENV PATH="/root/.cargo/bin:${PATH}"
+ENV RUSTC_WRAPPER=/usr/local/bin/sccache
+
+ARG POSTHOG_API_KEY
+ARG POSTHOG_API_ENDPOINT
+
+ENV VITE_PUBLIC_POSTHOG_KEY=$POSTHOG_API_KEY
+ENV VITE_PUBLIC_POSTHOG_HOST=$POSTHOG_API_ENDPOINT
+
+WORKDIR /app
+COPY . .
+
+RUN npm install -g pnpm && pnpm install
+
+RUN cd packages/local-web && pnpm run build
+
+RUN cargo build --release --bin server
+
+COPY --from=builder /sccache /sccache
+
+# Runtime stage
+FROM alpine:latest AS runtime
+
+RUN apk add --no-cache \
+    ca-certificates \
+    tini \
+    libgcc \
+    wget
+
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -u 1001 -S appuser -G appgroup
+
+COPY --from=builder /app/target/release/server /usr/local/bin/server
+
+RUN mkdir -p /repos && \
+    chown -R appuser:appgroup /repos
+
+USER appuser
+
+ENV HOST=0.0.0.0
+ENV PORT=3000
+EXPOSE 3000
+
+WORKDIR /repos
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --quiet --tries=1 --spider "http://${HOST:-localhost}:${PORT:-3000}" || exit 1
+
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["server"]

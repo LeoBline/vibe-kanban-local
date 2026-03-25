@@ -12,8 +12,10 @@ RUN apk add --no-cache \
 # Allow linking libclang on musl
 ENV RUSTFLAGS="-C target-feature=-crt-static"
 
-# Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+# Install Rust with musl target for static linking
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal && \
+    . "$HOME/.cargo/env" && \
+    rustup target add x86_64-unknown-linux-musl
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 ARG POSTHOG_API_KEY
@@ -25,20 +27,16 @@ ENV VITE_PUBLIC_POSTHOG_HOST=$POSTHOG_API_ENDPOINT
 # Set working directory
 WORKDIR /app
 
-# Copy package files for dependency caching
-COPY package*.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY packages/local-web/package*.json ./packages/local-web/
-COPY npx-cli/package*.json ./npx-cli/
+# Copy full source code
+COPY . .
 
 # Install pnpm and dependencies
 RUN npm install -g pnpm && pnpm install
 
-# Copy source code
-COPY . .
-
-# Build application
-RUN npm run generate-types
+# Build frontend (skip generate-types if types are already committed)
 RUN cd packages/local-web && pnpm run build
+
+# Build Rust server
 RUN cargo build --release --bin server
 
 # Runtime stage

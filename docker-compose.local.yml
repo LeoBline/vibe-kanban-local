@@ -4,7 +4,6 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        # Optional: Add PostHog for analytics (leave empty to disable)
         POSTHOG_API_KEY: ${POSTHOG_API_KEY:-}
         POSTHOG_API_ENDPOINT: ${POSTHOG_API_ENDPOINT:-}
     ports:
@@ -22,6 +21,15 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  db-ui:
+    image: adminer:4.8.1
+    ports:
+      - "${DB_UI_PORT:-8081}:8080"
+    volumes:
+      - ./adminer.ini:/var/www/html/adminer.inc.php:ro
+      - vibe-data:/data:ro
+    restart: unless-stopped
 
 volumes:
   vibe-data:

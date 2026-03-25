@@ -67,4 +67,3 @@ dotenv = "0.15"
 
 [features]
 default = []
-qa-mode = ["services/qa-mode", "executors/qa-mode"]

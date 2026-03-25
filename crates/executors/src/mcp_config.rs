@@ -394,20 +394,7 @@ fn apply_adapter(adapter: Adapter, canonical: Value) -> Value {
 
 impl CodingAgent {
     pub fn preconfigured_mcp(&self) -> Value {
-        use Adapter::*;
-
-        let adapter = match self {
-            CodingAgent::ClaudeCode(_) | CodingAgent::Amp(_) | CodingAgent::Droid(_) => Passthrough,
-            CodingAgent::QwenCode(_) | CodingAgent::Gemini(_) => Gemini,
-            CodingAgent::CursorAgent(_) => Cursor,
-            CodingAgent::Codex(_) => Codex,
-            CodingAgent::Opencode(_) => Opencode,
-            CodingAgent::Copilot(..) => Copilot,
-            #[cfg(feature = "qa-mode")]
-            CodingAgent::QaMock(_) => Passthrough, // QA mock doesn't need MCP
-        };
-
         let canonical = PRECONFIGURED_MCP_SERVERS.clone();
-        apply_adapter(adapter, canonical)
+        apply_adapter(Adapter::Passthrough, canonical)
     }
 }
