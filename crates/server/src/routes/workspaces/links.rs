@@ -28,7 +28,15 @@ pub async fn link_workspace(
     State(deployment): State<DeploymentImpl>,
     Json(payload): Json<LinkWorkspaceRequest>,
 ) -> Result<ResponseJson<ApiResponse<()>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. Link to remote issue requires GitHub integration."
+                    .to_string(),
+            ));
+        }
+    };
 
     let stats =
         diff_stream::compute_diff_stats(&deployment.db().pool, deployment.git(), &workspace).await;
@@ -95,7 +103,15 @@ pub async fn unlink_workspace(
     AxumPath(workspace_id): AxumPath<uuid::Uuid>,
     State(deployment): State<DeploymentImpl>,
 ) -> Result<ResponseJson<ApiResponse<()>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. Unlink from remote issue requires GitHub integration."
+                    .to_string(),
+            ));
+        }
+    };
 
     match client.delete_workspace(workspace_id).await {
         Ok(()) => Ok(ResponseJson(ApiResponse::success(()))),
