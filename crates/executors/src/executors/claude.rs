@@ -39,7 +39,8 @@ use crate::{
     env::ExecutionEnv,
     executors::{
         AppendPrompt, AvailabilityInfo, BaseCodingAgent, ExecutorError, SpawnedChild,
-        StandardCodingAgentExecutor, codex::client::LogWriter, utils::reorder_slash_commands,
+        StandardCodingAgentExecutor, utils::reorder_slash_commands,
+        claude::client::LogWriter,
     },
     logs::{
         ActionType, AnsweredQuestion, AskUserQuestionItem, AskUserQuestionOption, FileChange,
@@ -664,7 +665,7 @@ impl ClaudeCode {
         let commit_reminder_prompt = env.commit_reminder_prompt.clone();
         let cancel_for_task = cancel.clone();
         tokio::spawn(async move {
-            let log_writer = LogWriter::new(new_stdout);
+            let log_writer = LogWriter::new(Box::pin(new_stdout));
             let client = ClaudeAgentClient::new(
                 log_writer.clone(),
                 approvals_clone,

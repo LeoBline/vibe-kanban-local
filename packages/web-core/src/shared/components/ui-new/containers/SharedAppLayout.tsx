@@ -282,13 +282,17 @@ export function SharedAppLayout() {
     console.log('[DEBUG] handleCreateProject called', { isSignedIn, selectedOrgId });
 
     const localOrgStore = useLocalOrganizationStore.getState();
+    const organizations = localOrgStore.organizations;
     let orgId = localOrgStore.selectedOrgId;
 
-    if (!orgId) {
-      console.log('[DEBUG] No org selected, creating local org');
-      const newOrg = await localOrgStore.createOrganization('My Workspace');
-      orgId = newOrg.id;
-      console.log('[DEBUG] Created org:', orgId);
+    if (!orgId || !organizations.some(o => o.id === orgId)) {
+      if (organizations.length === 0) {
+        console.error('[DEBUG] No organizations available, cannot create project');
+        return;
+      }
+      orgId = organizations[0].id;
+      localOrgStore.setSelectedOrgId(orgId);
+      console.log('[DEBUG] Using first available org:', orgId);
     }
 
     try {

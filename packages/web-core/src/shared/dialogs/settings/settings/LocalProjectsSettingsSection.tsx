@@ -40,7 +40,6 @@ export function LocalProjectsSettingsSection({
 
   const localOrganizations = useLocalOrganizationStore((state) => state.organizations);
   const fetchOrganizations = useLocalOrganizationStore((state) => state.fetchOrganizations);
-  const createOrganization = useLocalOrganizationStore((state) => state.createOrganization);
   const setSelectedOrgId = useLocalOrganizationStore((state) => state.setSelectedOrgId);
 
   const localProjects = useLocalProjectStore((state) => state.projects);
@@ -81,13 +80,6 @@ export function LocalProjectsSettingsSection({
     setSelectedProjectId(null);
     setEditingProjectId(null);
   }, [setSelectedOrgId]);
-
-  const handleCreateOrganization = useCallback(async () => {
-    const name = `Workspace ${localOrganizations.length + 1}`;
-    const newOrg = await createOrganization(name);
-    setSelectedOrgIdLocal(newOrg.id);
-    setSelectedOrgId(newOrg.id);
-  }, [localOrganizations.length, createOrganization, setSelectedOrgId]);
 
   const handleCreateProject = useCallback(async () => {
     if (!selectedOrgId) {
@@ -186,13 +178,6 @@ export function LocalProjectsSettingsSection({
                   </option>
                 ))}
               </select>
-              <PrimaryButton
-                variant="secondary"
-                onClick={handleCreateOrganization}
-              >
-                <PlusIcon className="size-icon-xs mr-1" />
-                {t('settings.localProjects.createOrg', 'New Org')}
-              </PrimaryButton>
             </div>
           </SettingsField>
         </div>

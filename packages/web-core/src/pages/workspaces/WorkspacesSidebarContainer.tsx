@@ -323,6 +323,18 @@ export function WorkspacesSidebarContainer({
     fetchOrganizations();
   }, [fetchOrganizations]);
 
+  // Auto-select first organization if selectedOrgId is invalid or stale
+  const setSelectedOrgId = useLocalOrganizationStore((state) => state.setSelectedOrgId);
+  useEffect(() => {
+    if (localOrganizations.length > 0 && !selectedOrgId) {
+      console.log('[DEBUG WorkspacesSidebarContainer] Auto-selecting first org:', localOrganizations[0].id);
+      setSelectedOrgId(localOrganizations[0].id);
+    } else if (localOrganizations.length > 0 && selectedOrgId && !localOrganizations.some(o => o.id === selectedOrgId)) {
+      console.log('[DEBUG WorkspacesSidebarContainer] Selected org not found in list, switching to first org');
+      setSelectedOrgId(localOrganizations[0].id);
+    }
+  }, [localOrganizations, selectedOrgId, setSelectedOrgId]);
+
   // Load projects when organization changes
   useEffect(() => {
     if (selectedOrgId) {

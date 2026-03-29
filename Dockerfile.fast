@@ -1,32 +1,27 @@
-# Fast Build Dockerfile - 优化版
-# 使用 sccache 缓存 Rust 编译结果
-# 减少前端语言支持以加快构建
-
-# Build stage
-FROM node:24-alpine AS builder
+# Fast Build Dockerfile - 使用 Rust 官方镜像
+FROM rust:1.85-alpine AS builder
 
 RUN apk add --no-cache \
-    curl \
     build-base \
     perl \
     llvm-dev \
-    clang-dev
+    clang-dev \
+    openssl-dev \
+    pkgconfig \
+    nodejs \
+    npm
 
-ENV RUSTFLAGS="-C target-feature=-crt-static"
+ENV CARGO_HOME=/cargo
+ENV RUSTUP_HOME=/rustup
+ENV PATH="/cargo/bin:${PATH}"
+ENV PKG_CONFIG_PATH="/usr/lib/pkgconfig"
+ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
 ENV CARGO_INCREMENTAL=0
-ENV SCCACHE_GHA_ENABLED=true
-ENV SCCACHE_DIR=/sccache
+ENV RUSTFLAGS="-C target-feature=-crt-static"
 
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal && \
-    . "$HOME/.cargo/env" && \
+RUN mkdir -p /cargo && \
+    echo -e '[source.crates-io]\nreplace-with = "tuna"\n\n[source.tuna]\nregistry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"' > /cargo/config.toml && \
     rustup target add x86_64-unknown-linux-musl
-
-RUN curl -L https://github.com/mozilla/sccache/releases/download/v0.8.1/sccache-v0.8.1-x86_64-unknown-linux-musl.tar.gz | tar xz && \
-    mv sccache-v0.8.1-x86_64-unknown-linux-musl/sccache /usr/local/bin/ && \
-    chmod +x /usr/local/bin/sccache
-
-ENV PATH="/root/.cargo/bin:${PATH}"
-ENV RUSTC_WRAPPER=/usr/local/bin/sccache
 
 ARG POSTHOG_API_KEY
 ARG POSTHOG_API_ENDPOINT
@@ -43,9 +38,6 @@ RUN cd packages/local-web && pnpm run build
 
 RUN cargo build --release --bin server
 
-COPY --from=builder /sccache /sccache
-
-# Runtime stage
 FROM alpine:latest AS runtime
 
 RUN apk add --no-cache \

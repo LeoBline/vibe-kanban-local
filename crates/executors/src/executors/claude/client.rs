@@ -1,5 +1,10 @@
-use std::sync::Arc;
+use std::{
+    io,
+    pin::Pin,
+    sync::Arc,
+};
 
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
 use workspace_utils::approvals::{ApprovalStatus, QuestionStatus};
 
@@ -16,7 +21,6 @@ use crate::{
                 PermissionUpdateType,
             },
         },
-        codex::client::LogWriter,
     },
 };
 
@@ -24,21 +28,44 @@ const EXIT_PLAN_MODE_NAME: &str = "ExitPlanMode";
 const ASK_USER_QUESTION_NAME: &str = "AskUserQuestion";
 pub const AUTO_APPROVE_CALLBACK_ID: &str = "AUTO_APPROVE_CALLBACK_ID";
 pub const STOP_GIT_CHECK_CALLBACK_ID: &str = "STOP_GIT_CHECK_CALLBACK_ID";
-// Prefix for denial messages from the user, mirrors claude code CLI behavior
 const TOOL_DENY_PREFIX: &str = "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). To tell you how to proceed, the user said: ";
 
-/// Claude Agent client with control protocol support
+#[derive(Clone)]
+pub struct LogWriter {
+    stdout: Arc<tokio::sync::Mutex<Pin<Box<dyn AsyncWrite + Send + 'static>>>>,
+}
+
+impl LogWriter {
+    pub fn new(stdout: Pin<Box<dyn AsyncWrite + Send + 'static>>) -> Self {
+        Self {
+            stdout: Arc::new(tokio::sync::Mutex::new(stdout)),
+        }
+    }
+
+    pub async fn log_raw(&self, line: &str) -> Result<(), ExecutorError> {
+        let mut writer = self.stdout.lock().await;
+        let mut data = line.as_bytes().to_vec();
+        data.push(b'\n');
+        writer.write_all(&data).await.map_err(|e| {
+            ExecutorError::Io(io::Error::other(format!("failed to write to stdout: {e}")))
+        })?;
+        writer.flush().await.map_err(|e| {
+            ExecutorError::Io(io::Error::other(format!("failed to flush stdout: {e}")))
+        })?;
+        Ok(())
+    }
+}
+
 pub struct ClaudeAgentClient {
     log_writer: LogWriter,
     approvals: Option<Arc<dyn ExecutorApprovalService>>,
-    auto_approve: bool, // true when approvals is None
+    auto_approve: bool,
     repo_context: RepoContext,
     commit_reminder_prompt: String,
     cancel: CancellationToken,
 }
 
 impl ClaudeAgentClient {
-    /// Create a new client with optional approval service
     pub fn new(
         log_writer: LogWriter,
         approvals: Option<Arc<dyn ExecutorApprovalService>>,
@@ -307,8 +334,6 @@ impl ClaudeAgentClient {
             self.handle_approval(latest_tool_use_id, tool_name, input)
                 .await
         } else {
-            // Auto approve tools with no matching tool_use_id
-            // tool_use_id is undocumented so this may not be possible
             tracing::warn!(
                 "No tool_use_id available for tool '{}', cannot request approval",
                 tool_name
@@ -326,7 +351,6 @@ impl ClaudeAgentClient {
         input: serde_json::Value,
         _tool_use_id: Option<String>,
     ) -> Result<serde_json::Value, ExecutorError> {
-        // Stop hook git check - uses `decision` (approve/block) and `reason` fields
         if callback_id == STOP_GIT_CHECK_CALLBACK_ID {
             if input
                 .get("stop_hook_active")
@@ -364,9 +388,6 @@ impl ClaudeAgentClient {
                     }
                 })),
                 _ => {
-                    // Hook callbacks is only used to forward approval requests to can_use_tool.
-                    // This works because `ask` decision in hook callback triggers a can_use_tool request
-                    // https://docs.claude.com/en/api/agent-sdk/permissions#permission-flow-diagram
                     Ok(serde_json::json!({
                         "hookSpecificOutput": {
                             "hookEventName": "PreToolUse",

@@ -111,8 +111,9 @@ pub async fn create_and_start_workspace(
 
     if let Some(linked_issue) = &linked_issue
         && let Ok(client) = deployment.remote_client()
+        && let Ok(issue_uuid) = Uuid::parse_str(&linked_issue.issue_id)
     {
-        match import_issue_attachment_images(&client, deployment.image(), linked_issue.issue_id)
+        match import_issue_attachment_images(&client, deployment.image(), issue_uuid)
             .await
         {
             Ok(imported_ids) if !imported_ids.is_empty() => {

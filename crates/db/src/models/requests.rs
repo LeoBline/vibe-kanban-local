@@ -24,8 +24,8 @@ pub struct CreateWorkspaceApiRequest {
 
 #[derive(Debug, Serialize, Deserialize, TS)]
 pub struct LinkedIssueInfo {
-    pub remote_project_id: Uuid,
-    pub issue_id: Uuid,
+    pub remote_project_id: String,
+    pub issue_id: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, TS)]
