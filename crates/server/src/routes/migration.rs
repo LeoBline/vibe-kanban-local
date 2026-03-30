@@ -21,7 +21,15 @@ async fn start_migration(
     State(deployment): State<DeploymentImpl>,
     Json(request): Json<MigrationRequest>,
 ) -> Result<ResponseJson<ApiResponse<MigrationResponse>>, ApiError> {
-    let remote_client = deployment.remote_client()?;
+    let remote_client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
     let sqlite_pool = deployment.db().pool.clone();
 
     let service = MigrationService::new(sqlite_pool, remote_client);

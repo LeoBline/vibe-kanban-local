@@ -21,7 +21,15 @@ async fn get_workspace_by_local_id(
     State(deployment): State<DeploymentImpl>,
     Path(local_workspace_id): Path<Uuid>,
 ) -> Result<ResponseJson<ApiResponse<Workspace>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
     let workspace = client.get_workspace_by_local_id(local_workspace_id).await?;
     Ok(ResponseJson(ApiResponse::success(workspace)))
 }

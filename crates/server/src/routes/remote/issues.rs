@@ -31,7 +31,15 @@ async fn list_issues(
     State(deployment): State<DeploymentImpl>,
     Query(query): Query<ListIssuesQuery>,
 ) -> Result<ResponseJson<ApiResponse<ListIssuesResponse>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
     let response = client.list_issues(query.project_id).await?;
     Ok(ResponseJson(ApiResponse::success(response)))
 }
@@ -40,7 +48,15 @@ async fn get_issue(
     State(deployment): State<DeploymentImpl>,
     Path(issue_id): Path<Uuid>,
 ) -> Result<ResponseJson<ApiResponse<Issue>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
     let response = client.get_issue(issue_id).await?;
     Ok(ResponseJson(ApiResponse::success(response)))
 }
@@ -49,7 +65,15 @@ async fn create_issue(
     State(deployment): State<DeploymentImpl>,
     Json(request): Json<CreateIssueRequest>,
 ) -> Result<ResponseJson<ApiResponse<MutationResponse<Issue>>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
     let response = client.create_issue(&request).await?;
     Ok(ResponseJson(ApiResponse::success(response)))
 }
@@ -59,7 +83,15 @@ async fn update_issue(
     Path(issue_id): Path<Uuid>,
     Json(request): Json<UpdateIssueRequest>,
 ) -> Result<ResponseJson<ApiResponse<MutationResponse<Issue>>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
     let response = client.update_issue(issue_id, &request).await?;
     Ok(ResponseJson(ApiResponse::success(response)))
 }
@@ -68,7 +100,15 @@ async fn delete_issue(
     State(deployment): State<DeploymentImpl>,
     Path(issue_id): Path<Uuid>,
 ) -> Result<ResponseJson<ApiResponse<()>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
     client.delete_issue(issue_id).await?;
     Ok(ResponseJson(ApiResponse::success(())))
 }

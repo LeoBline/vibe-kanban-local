@@ -102,7 +102,15 @@ async fn handoff_init(
     State(deployment): State<DeploymentImpl>,
     Json(payload): Json<HandoffInitPayload>,
 ) -> Result<ResponseJson<ApiResponse<HandoffInitResponseBody>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub OAuth requires GitHub integration to be configured."
+                    .to_string(),
+            ));
+        }
+    };
 
     let app_verifier = generate_secret();
     let app_challenge = hash_sha256_hex(&app_verifier);
@@ -172,7 +180,16 @@ async fn handoff_complete(
         }
     };
 
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Ok(simple_html_response(
+                StatusCode::BAD_REQUEST,
+                "Remote client not configured. GitHub OAuth requires GitHub integration to be configured."
+                    .to_string(),
+            ));
+        }
+    };
 
     let redeem_request = HandoffRedeemRequest {
         handoff_id: query.handoff_id,
@@ -329,7 +346,15 @@ async fn status(
 async fn get_token(
     State(deployment): State<DeploymentImpl>,
 ) -> Result<ResponseJson<ApiResponse<TokenResponse>>, ApiError> {
-    let remote_client = deployment.remote_client()?;
+    let remote_client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
 
     // This will auto-refresh the token if expired
     let access_token = remote_client
@@ -349,7 +374,15 @@ async fn get_token(
 async fn get_current_user(
     State(deployment): State<DeploymentImpl>,
 ) -> Result<ResponseJson<ApiResponse<CurrentUserResponse>>, ApiError> {
-    let remote_client = deployment.remote_client()?;
+    let remote_client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
 
     // Get the access token from remote client
     let access_token = remote_client

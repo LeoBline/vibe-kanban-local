@@ -24,7 +24,15 @@ async fn list_project_statuses(
     State(deployment): State<DeploymentImpl>,
     Query(query): Query<ListProjectStatusesQuery>,
 ) -> Result<ResponseJson<ApiResponse<ListProjectStatusesResponse>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
     let response = client.list_project_statuses(query.project_id).await?;
     Ok(ResponseJson(ApiResponse::success(response)))
 }

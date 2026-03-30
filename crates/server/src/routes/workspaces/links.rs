@@ -11,7 +11,7 @@ use db::models::{
     workspace::Workspace,
 };
 use deployment::Deployment;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use services::services::{diff_stream, remote_client::RemoteClientError, remote_sync};
 use utils::response::ApiResponse;
 
@@ -23,18 +23,31 @@ pub struct LinkWorkspaceRequest {
     pub issue_id: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct LinkWorkspaceResponse {
+    pub linked: bool,
+    pub message: Option<String>,
+}
+
 pub async fn link_workspace(
     Extension(workspace): Extension<Workspace>,
     State(deployment): State<DeploymentImpl>,
     Json(payload): Json<LinkWorkspaceRequest>,
-) -> Result<ResponseJson<ApiResponse<()>>, ApiError> {
+) -> Result<ResponseJson<ApiResponse<LinkWorkspaceResponse>>, ApiError> {
     let client = match deployment.remote_client() {
         Ok(client) => client,
         Err(_) => {
-            return Err(ApiError::BadRequest(
-                "Remote client not configured. Link to remote issue requires GitHub integration."
-                    .to_string(),
-            ));
+            tracing::warn!(
+                "Remote client not configured. Skipping remote workspace link for workspace {}",
+                workspace.id
+            );
+            return Ok(ResponseJson(ApiResponse::success(LinkWorkspaceResponse {
+                linked: false,
+                message: Some(
+                    "Remote client not configured. Workspace created locally but not linked to remote."
+                        .to_string(),
+                ),
+            })));
         }
     };
 
@@ -96,27 +109,43 @@ pub async fn link_workspace(
         });
     }
 
-    Ok(ResponseJson(ApiResponse::success(())))
+    Ok(ResponseJson(ApiResponse::success(LinkWorkspaceResponse {
+        linked: true,
+        message: Some("Workspace linked to remote successfully.".to_string()),
+    })))
 }
 
 pub async fn unlink_workspace(
     AxumPath(workspace_id): AxumPath<uuid::Uuid>,
     State(deployment): State<DeploymentImpl>,
-) -> Result<ResponseJson<ApiResponse<()>>, ApiError> {
+) -> Result<ResponseJson<ApiResponse<LinkWorkspaceResponse>>, ApiError> {
     let client = match deployment.remote_client() {
         Ok(client) => client,
         Err(_) => {
-            return Err(ApiError::BadRequest(
-                "Remote client not configured. Unlink from remote issue requires GitHub integration."
-                    .to_string(),
-            ));
+            tracing::warn!(
+                "Remote client not configured. Skipping remote workspace unlink for workspace {}",
+                workspace_id
+            );
+            return Ok(ResponseJson(ApiResponse::success(LinkWorkspaceResponse {
+                linked: false,
+                message: Some(
+                    "Remote client not configured. Workspace unlinked locally but not from remote."
+                        .to_string(),
+                ),
+            })));
         }
     };
 
     match client.delete_workspace(workspace_id).await {
-        Ok(()) => Ok(ResponseJson(ApiResponse::success(()))),
+        Ok(()) => Ok(ResponseJson(ApiResponse::success(LinkWorkspaceResponse {
+            linked: false,
+            message: Some("Workspace unlinked from remote successfully.".to_string()),
+        }))),
         Err(RemoteClientError::Http { status: 404, .. }) => {
-            Ok(ResponseJson(ApiResponse::success(())))
+            Ok(ResponseJson(ApiResponse::success(LinkWorkspaceResponse {
+                linked: false,
+                message: Some("Workspace was not linked to remote.".to_string()),
+            })))
         }
         Err(e) => Err(e.into()),
     }

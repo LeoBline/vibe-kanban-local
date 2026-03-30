@@ -17,7 +17,15 @@ async fn list_pull_requests(
     State(deployment): State<DeploymentImpl>,
     Query(query): Query<ListPullRequestsQuery>,
 ) -> Result<ResponseJson<ApiResponse<ListPullRequestsResponse>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
     let response = client.list_pull_requests(query.issue_id).await?;
     Ok(ResponseJson(ApiResponse::success(response)))
 }

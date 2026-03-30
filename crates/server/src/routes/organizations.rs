@@ -50,7 +50,15 @@ pub fn router() -> Router<DeploymentImpl> {
 async fn list_organizations(
     State(deployment): State<DeploymentImpl>,
 ) -> Result<ResponseJson<ApiResponse<ListOrganizationsResponse>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
 
     let response = client.list_organizations().await?;
 
@@ -61,7 +69,15 @@ async fn get_organization(
     State(deployment): State<DeploymentImpl>,
     Path(id): Path<Uuid>,
 ) -> Result<ResponseJson<ApiResponse<GetOrganizationResponse>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
 
     let response = client.get_organization(id).await?;
 
@@ -72,7 +88,15 @@ async fn create_organization(
     State(deployment): State<DeploymentImpl>,
     Json(request): Json<CreateOrganizationRequest>,
 ) -> Result<ResponseJson<ApiResponse<CreateOrganizationResponse>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
 
     let response = client.create_organization(&request).await?;
 
@@ -93,7 +117,15 @@ async fn update_organization(
     Path(id): Path<Uuid>,
     Json(request): Json<UpdateOrganizationRequest>,
 ) -> Result<ResponseJson<ApiResponse<Organization>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
 
     let response = client.update_organization(id, &request).await?;
 
@@ -104,7 +136,15 @@ async fn delete_organization(
     State(deployment): State<DeploymentImpl>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
 
     client.delete_organization(id).await?;
 
@@ -116,7 +156,15 @@ async fn create_invitation(
     Path(org_id): Path<Uuid>,
     Json(request): Json<CreateInvitationRequest>,
 ) -> Result<ResponseJson<ApiResponse<CreateInvitationResponse>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
 
     let response = client.create_invitation(org_id, &request).await?;
 
@@ -138,7 +186,15 @@ async fn list_invitations(
     State(deployment): State<DeploymentImpl>,
     Path(org_id): Path<Uuid>,
 ) -> Result<ResponseJson<ApiResponse<ListInvitationsResponse>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
 
     let response = client.list_invitations(org_id).await?;
 
@@ -149,7 +205,15 @@ async fn get_invitation(
     State(deployment): State<DeploymentImpl>,
     Path(token): Path<String>,
 ) -> Result<ResponseJson<ApiResponse<GetInvitationResponse>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
 
     let response = client.get_invitation(&token).await?;
 
@@ -161,7 +225,15 @@ async fn revoke_invitation(
     Path(org_id): Path<Uuid>,
     Json(payload): Json<RevokeInvitationRequest>,
 ) -> Result<StatusCode, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
 
     client
         .revoke_invitation(org_id, payload.invitation_id)
@@ -174,7 +246,15 @@ async fn accept_invitation(
     State(deployment): State<DeploymentImpl>,
     Path(invitation_token): Path<String>,
 ) -> Result<ResponseJson<ApiResponse<AcceptInvitationResponse>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
 
     let response = client.accept_invitation(&invitation_token).await?;
 
@@ -185,7 +265,15 @@ async fn list_members(
     State(deployment): State<DeploymentImpl>,
     Path(org_id): Path<Uuid>,
 ) -> Result<ResponseJson<ApiResponse<ListMembersResponse>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
 
     let response = client.list_members(org_id).await?;
 
@@ -196,7 +284,15 @@ async fn remove_member(
     State(deployment): State<DeploymentImpl>,
     Path((org_id, user_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
 
     client.remove_member(org_id, user_id).await?;
 
@@ -208,7 +304,15 @@ async fn update_member_role(
     Path((org_id, user_id)): Path<(Uuid, Uuid)>,
     Json(request): Json<UpdateMemberRoleRequest>,
 ) -> Result<ResponseJson<ApiResponse<UpdateMemberRoleResponse>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
 
     let response = client.update_member_role(org_id, user_id, &request).await?;
 

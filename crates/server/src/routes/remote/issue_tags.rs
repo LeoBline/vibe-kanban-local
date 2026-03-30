@@ -29,7 +29,15 @@ async fn list_issue_tags(
     State(deployment): State<DeploymentImpl>,
     Query(query): Query<ListIssueTagsQuery>,
 ) -> Result<ResponseJson<ApiResponse<ListIssueTagsResponse>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
     let response = client.list_issue_tags(query.issue_id).await?;
     Ok(ResponseJson(ApiResponse::success(response)))
 }
@@ -38,7 +46,15 @@ async fn get_issue_tag(
     State(deployment): State<DeploymentImpl>,
     Path(issue_tag_id): Path<Uuid>,
 ) -> Result<ResponseJson<ApiResponse<IssueTag>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
     let response = client.get_issue_tag(issue_tag_id).await?;
     Ok(ResponseJson(ApiResponse::success(response)))
 }
@@ -47,7 +63,15 @@ async fn create_issue_tag(
     State(deployment): State<DeploymentImpl>,
     Json(request): Json<CreateIssueTagRequest>,
 ) -> Result<ResponseJson<ApiResponse<MutationResponse<IssueTag>>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
     let response = client.create_issue_tag(&request).await?;
     Ok(ResponseJson(ApiResponse::success(response)))
 }
@@ -56,7 +80,15 @@ async fn delete_issue_tag(
     State(deployment): State<DeploymentImpl>,
     Path(issue_tag_id): Path<Uuid>,
 ) -> Result<ResponseJson<ApiResponse<()>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. GitHub integration is required for this operation."
+                    .to_string(),
+            ));
+        }
+    };
     client.delete_issue_tag(issue_tag_id).await?;
     Ok(ResponseJson(ApiResponse::success(())))
 }

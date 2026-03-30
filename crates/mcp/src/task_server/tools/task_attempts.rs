@@ -157,8 +157,8 @@ impl McpServer {
 
             (
                 Some(LinkedIssueInfo {
-                    remote_project_id: issue.project_id,
-                    issue_id,
+                    remote_project_id: issue.project_id.to_string(),
+                    issue_id: issue_id.to_string(),
                 }),
                 build_workspace_prompt_from_issue(&issue),
             )

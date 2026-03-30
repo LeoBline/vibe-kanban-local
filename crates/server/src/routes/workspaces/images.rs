@@ -108,7 +108,15 @@ pub async fn import_issue_attachments(
     State(deployment): State<DeploymentImpl>,
     axum::Json(payload): axum::Json<ImportIssueAttachmentsRequest>,
 ) -> Result<ResponseJson<ApiResponse<ImportIssueAttachmentsResponse>>, ApiError> {
-    let client = deployment.remote_client()?;
+    let client = match deployment.remote_client() {
+        Ok(client) => client,
+        Err(_) => {
+            return Err(ApiError::BadRequest(
+                "Remote client not configured. Import attachments requires GitHub integration."
+                    .to_string(),
+            ));
+        }
+    };
     let image_ids =
         import_issue_attachment_images(&client, deployment.image(), payload.issue_id).await?;
 
